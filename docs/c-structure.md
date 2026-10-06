@@ -1,179 +1,100 @@
-# C 구현 구조와 브랜치 전략
+# C 구현 구조와 작업 방법
 
-## 파일 구조 (제안)
-```
-vehicle-body-control/
-├── src/
-│   ├── common.h              (A 담당) 공통 구조체, 상태, C1~C5 타이머
-│   ├── common.c              (A 담당)
-│   ├── lighting.h            (B 담당) L1~L6 로직
-│   ├── lighting.c            (B 담당)
-│   ├── wipers.h              (C 담당) W1~W5 로직
-│   ├── wipers.c              (C 담당)
-│   ├── doors.h               (D 담당) D1~D5 로직
-│   ├── doors.c               (D 담당)
-│   ├── input.h               (E 담당) 입력 처리 (파일/터미널/시뮬레이션)
-│   ├── input.c               (E 담당)
-│   ├── output.h              (E 담당) 출력 표시
-│   ├── output.c              (E 담당)
-│   └── main.c                (A 담당) 메인 루프, 각 모듈 호출
-├── tests/
-│   ├── test_common.c         (테스트)
-│   ├── test_lighting.c       (B가 작성, D가 리뷰)
-│   ├── test_wipers.c         (C가 작성, B가 리뷰)
-│   ├── test_doors.c          (D가 작성, C가 리뷰)
-│   └── test_integration.c    (모든 모듈이 함께 동작하는지)
-├── Makefile
-└── docs/
-    ├── requirements.md
-    ├── roles.md
-    └── verification.md
+## 빌드와 테스트
+```bash
+make          # build/vbc (임시 데모)
+make run      # 데모 실행
+make test     # tests/test_*.c 전부 빌드·실행. 새 test_*.c 파일은 자동 포함
+make clean
 ```
 
-## 핵심 인터페이스 (common.h)
+## 구조
+```
+입력(vbc_rx_*, vbc_set_*) ─► common.c: C2~C4 판정 → VbcContext
+                                   │
+               vbc_step() 호출 순서 ▼
+   wipers_step ──(최종 와이퍼 단계)──► lighting_step   doors_step   dashboard_step
+        │                                  │               │              │
+   out.wiper, rain_fault_lamp   out.headlight_on, lux_fault_lamp  out.door_locked  out.warning
+```
+
+| 파일 | 담당 | 내용 |
+|---|---|---|
+| `src/common.h/c` | A 이태식 | 타입, 입력 수신, C1 타이머(HoldTimer), C2~C4 판정, C5 초기값 |
+| `src/vbc.h/c` | A 이태식 | 시스템 상태(VbcSystem), 모듈 호출 순서 |
+| `src/main.c` | A → F | 임시 데모. 입력/시연 방식이 정해지면 F가 교체 |
+| `src/wipers.h/c` | C 이지윤 | W1~W5 |
+| `src/lighting.h/c` | B 김성진 | L1~L6 |
+| `src/doors.h/c` | D 김의현 | D1~D3 (잠금) |
+| `src/dashboard.h/c` | E 김주형 | D4~D5 (계기판 경고) |
+| `tests/test_util.h` | 공용 | CHECK, CHECK_EQ, TEST, RUN |
+| `tests/sim.h` | 공용 | 주기 입력 자동 공급 + 시간 진행 |
+| `tests/test_<모듈>.c` | 각 담당 | 요구사항별 테스트 |
+
+## 모듈 작성 규칙
+- 모듈은 `const VbcContext *ctx`만 보고 판단한다. 수신 시각이나 원본 값(`VbcInputs`)을 직접 보지 않는다.
+  C2~C4 판단은 이미 `ctx`에 반영돼 있다.
+  - 시동: `ctx->ignition_on` (C4 수신 중단이면 이미 false)
+  - 유효한 속도: `ctx->speed_valid`가 true일 때만 `ctx->speed_kmh` 사용 (W3, D3, D4)
+  - 센서: `ctx->lux_fault`, `ctx->lux_valid`, `ctx->lux` / `ctx->rain_*`
+  - D1 수신 중단: `ctx->rx_lost`
+- 시간은 `ctx->now`(ms)만 쓴다. `time()`, `clock()`, `sleep()` 금지 → 테스트에서 2.9초/3초를 정확히 확인할 수 있다.
+- "N초 연속"(C1)은 `HoldTimer`를 상태 구조체에 넣고 `hold_timer_update()`를 매 주기 호출한다.
+- 주기 사이에 기억할 값은 모듈 상태 구조체(`LightingState` 등)에 필드를 추가한다. 전역 변수는 쓰지 않는다.
+- `common.h`, `vbc.h`의 시그니처를 바꿔야 하면 A와 먼저 합의한다 (모든 모듈에 영향).
+
+## 테스트 작성 예 (tests/test_lighting.c)
 ```c
-/* 상태 구조체 */
-typedef struct {
-  /* 입력 */
-  uint16_t speed;           // 0~250 km/h
-  char gear;                // 'P', 'R', 'N', 'D'
-  uint8_t engine_on;        // 0/1
-  uint16_t illuminance;     // 0~60000 lux (65535 = 센서 고장)
-  uint8_t rainfall;         // 0~100 % (255 = 센서 고장)
-  uint8_t door_fl, door_fr, door_rl, door_rr;  // 0=닫음, 1=열림
-  char light_switch;        // 'A'(AUTO), 'O'(OFF), 'N'(ON)
-  char wiper_switch;        // 'O'(OFF), 'A'(AUTO), 'L'(LOW), 'H'(HIGH)
-  
-  /* 타임스탬프 (C2~C4용) */
-  time_t speed_time, gear_time, engine_time;
-  time_t illuminance_time, rainfall_time;
-  
-  /* 출력 */
-  uint8_t headlight;        // 0=꺼짐, 1=켜짐
-  uint8_t light_fault;      // 0=정상, 1=고장
-  uint8_t wiper_step;       // 0=정지, 1=간헐, 2=저속, 3=고속
-  uint8_t rainfall_fault;   // 0=정상, 1=고장
-  uint8_t door_lock;        // 0=풀림, 1=잠김
-  uint8_t warning;          // 0=없음, 1=주행중도어, 2=조도고장, 3=강우고장
-} VehicleState;
+#include "sim.h"
+#include "test_util.h"
 
-/* C1~C5 상태 (코어에서 관리) */
-typedef struct {
-  time_t last_valid_speed_time;
-  time_t condition_start_time;  // 특정 조건이 시작된 시각
-  // ... 각 조건별 타이머
-} TimerState;
+/* L2: 시동 ON, AUTO, 2초에 조도 3000→300 → 2.9초 꺼짐, 3.0초 점등 */
+TEST(l2_dark_1s_turns_on)
+{
+    Sim s;
+    sim_init(&s);                                   /* 시동 ON, P, 속도 0, 50ms마다 입력 */
+    vbc_set_light_switch(&s.sys.in, LIGHT_SW_AUTO);
+    s.feed.lux = 3000;
+    sim_run_until(&s, 1950);
+    s.feed.lux = 300;                               /* 2.0초부터 */
+    sim_run_until(&s, 2900);
+    CHECK_EQ(s.sys.out.headlight_on, false);
+    sim_run_until(&s, 3000);
+    CHECK_EQ(s.sys.out.headlight_on, true);
+}
 
-/* 함수 인터페이스 */
-void state_init(VehicleState *state);
-uint8_t is_valid_speed(const VehicleState *s, const TimerState *t);
-uint8_t is_receiving_stopped(const VehicleState *s, const TimerState *t);
-uint8_t check_sensor_fault(const VehicleState *s, const TimerState *t, char sensor);
-// ...
-
-/* 각 모듈의 함수 */
-void lighting_update(VehicleState *s, const TimerState *t);
-void wipers_update(VehicleState *s, const TimerState *t);
-void doors_update(VehicleState *s, const TimerState *t);
+int main(void)
+{
+    printf("== L 조명\n");
+    RUN(l2_dark_1s_turns_on);
+    return test_summary();
+}
 ```
+- 끊김·고장 시험: `s.feed.mute = SIM_LUX;` (그 입력만 안 보냄), 범위 밖: `s.feed.lux = 60001;`
+- 도어·스위치: `vbc_set_door(&s.sys.in, DOOR_FL, true);`, `vbc_set_wiper_switch(...)`
+- 테스트 이름에 요구사항 ID를 붙이고, 결과(PASS/FAIL 출력)를 PR과 `docs/verification.md`에 붙인다.
 
-## 브랜치 전략
-
-### 주요 브랜치
-- `main`: 안정적인 릴리스 버전
-- `develop`: 통합 개발 브랜치
-
-### 기능 브랜치 (각자 담당 모듈)
+## 브랜치와 합치기
 ```
-feature/core          → A (팀장) 담당
-feature/lighting      → B 담당
-feature/wipers        → C 담당
-feature/doors         → D 담당
-feature/input-output  → E 담당
+feature/core, feature/lighting, feature/wipers, feature/doors, feature/dashboard
+        │ PR (리뷰어 = 교차 검증 담당, make test 결과 첨부)
+        ▼
+     develop ── 통합 테스트 ──► main (발표 기준본)
 ```
+1. `git checkout feature/<모듈>` 후 `git merge origin/develop`으로 최신 인터페이스를 받는다.
+2. 자기 모듈 `.c`/`.h`와 `tests/test_<모듈>.c`만 수정한다.
+3. `make test` 통과 확인 → `develop`으로 PR. 리뷰어는 roles.md의 교차 검증 담당.
+4. 머지 후 다른 사람 브랜치는 `git merge origin/develop`으로 따라간다. 충돌을 합친 뒤에는 `make test`를 다시 돌린다.
 
-### 통합 흐름
-```
-feature/core
-  ↓ PR + 리뷰 (develop으로, 리뷰어: B)
-develop ← merge
-  ↓
-feature/lighting
-  ↓ PR + 리뷰 (develop으로, 리뷰어: C)
-develop ← merge
-  ↓
-feature/wipers
-  ↓ PR + 리뷰 (develop으로, 리뷰어: D)
-develop ← merge
-  ↓
-feature/doors
-  ↓ PR + 리뷰 (develop으로, 리뷰어: B)
-develop ← merge
-  ↓
-feature/input-output
-  ↓ PR + 리뷰 (develop으로, 리뷰어: A)
-develop ← merge
-  ↓
-develop → main (최종 통합, 전체 테스트 후)
-```
+## 코어가 정한 해석 (질의 후보)
+사양서에 명시가 없어 코어가 임시로 정한 부분. 강사 질의(사양서 9장) 후 답에 맞춰 고친다.
 
-## 각 단계별 작업
-
-### 1단계: 코어 구조 정의 (A 담당, develop에 merge)
-- [ ] `common.h`: VehicleState, TimerState 구조체 정의
-- [ ] `common.c`: C1~C5 타이머 로직 구현
-- [ ] `main.c`: 메인 루프 스켈레톤 (각 모듈 함수 호출)
-- 브랜치: `feature/core`
-- PR: develop으로 (리뷰어: B)
-
-### 2단계: 각 기능 모듈 구현 (병렬)
-- B: `feature/lighting` → lighting.h/c + test_lighting.c
-  - PR: develop으로 (리뷰어: C)
-- C: `feature/wipers` → wipers.h/c + test_wipers.c
-  - PR: develop으로 (리뷰어: D)
-- D: `feature/doors` → doors.h/c + test_doors.c
-  - PR: develop으로 (리뷰어: B)
-
-### 3단계: 입력/출력 (E 담당, develop에 merge)
-- [ ] `input.c`: 입력 처리 (파일/시나리오/터미널)
-- [ ] `output.c`: 결과 표시
-- 브랜치: `feature/input-output`
-- PR: develop으로 (리뷰어: A)
-
-### 4단계: 통합 테스트 (모두)
-- develop에서 전체 모듈이 함께 동작하는지 확인
-- `test_integration.c` 작성 (각자 자기 요구사항 테스트 추가)
-
-### 5단계: 최종 릴리스 (develop → main)
-- develop에서 회귀 테스트 완료 후
-- main으로 merge (태그: v1.0.0)
-
-## PR 체크리스트
-각 PR에는 다음을 포함하세요:
-
-```markdown
-## 요구사항 ID
-[예: C1, C2, L1~L6]
-
-## 변경 내용
-- [파일 목록]
-- [구현한 내용]
-
-## 테스트 결과
-| 입력 | 기대 | 실제 | 결과 |
+| # | 항목 | 현재 구현 | 근거 |
 |---|---|---|---|
-
-## 리뷰 체크리스트 (리뷰어용)
-- [ ] 코드가 요구사항을 구현했는가
-- [ ] 경계값(예: 2.9초, 3초)을 테스트했는가
-- [ ] 다른 모듈과의 인터페이스가 올바른가
-- [ ] 타이머/센서 고장 처리가 올바른가
-```
-
-## 충돌 해결
-여러 사람이 `common.h`를 건드릴 수 있으니, A가 interface를 먼저 정의하고 다른 사람이 건드리지 않도록 합시다.
-
-만약 충돌이 나면:
-1. 양쪽 변경을 코드 리뷰로 확인
-2. 합친 결과를 테스트
-3. 전체 통합 테스트 실행
+| Q1 | 0.5초 경계 | 마지막 수신 후 499ms까지 정상, 500ms부터 미수신(고장·중단) | C2 "0.5초 동안 들어오지 않으면", C3 "0.5초가 지나지 않았고" |
+| Q2 | 첫 수신 전(0~0.5초)의 시동·기어 | 시동 꺼짐, 기어 P로 간주 | C5 시작 상태와 일치하도록 |
+| Q3 | 첫 수신 전의 조도·강우 | 고장 아님, 값 없음(`lux_valid=false`) → L2·L3·W2 판단 안 함 | C2 "시작 시점부터 0.5초를 셉니다" |
+| Q4 | 범위 밖 값 | 들어온 즉시 고장 (0.5초 기다리지 않음), 정상 값이 오면 즉시 해제 | C2 "또는 유효 범위 밖" |
+| Q5 | 범위 밖 속도 | 유효한 속도 아님(C3), 수신 중단(C4)은 아님 | C4는 "들어오지 않으면"만 해당 |
+| Q6 | 스위치 초기 위치 | 조명 OFF, 와이퍼 OFF | 사양서에 없음. 시동이 꺼져 있어 C5 출력에는 영향 없음 |
+| Q7 | 시간 판정 간격 | `vbc_step()`을 50ms 이하 간격 또는 입력 변화마다 호출 | 조건 변화는 step 시점에만 관측됨 |
