@@ -29,3 +29,26 @@
 - 만든 사람과 검증하는 사람은 다르다.
 - PR에는 요구사항 ID와 테스트 결과를 붙인다.
 - 자세한 내용은 [CLAUDE.md](CLAUDE.md), [증명 기록](docs/verification.md) 참고.
+## 시스템 작동 흐름
+
+```
+터미널에서 사용자 입력 받음
+         ↓
+    main.c
+    ├─ 입력 파싱 (속도, 기어, 시동, 조도, 강우, 도어 등)
+    ├─ vbc_rx_*() / vbc_set_*() 호출 ← 입력 저장
+    ├─ vbc_step() 호출 ← 한 주기 실행
+    │   ├─ common.c: C2~C4 판정 (VbcContext 만들기)
+    │   ├─ wipers_step() 호출 ← C 와이퍼
+    │   ├─ lighting_step() 호출 ← B 조명
+    │   ├─ doors_step() 호출 ← D 도어·잠금
+    │   └─ dashboard_step() 호출 ← E 계기판
+    │       ↓ (각 모듈이 sys.out 업데이트)
+    ├─ sys.out 읽기 (최종 결과)
+    └─ 터미널에 출력
+         ↓
+    화면에 표시
+```
+
+각 모듈은 공통 인터페이스(`VbcContext`)를 통해 독립적으로 작동하므로, 입력/출력 방식을 바꿔도 코어 로직은 건드리지 않는다.
+
