@@ -22,7 +22,7 @@ make clean
 |---|---|---|
 | `src/common.h/c` | A 이태식 | 타입, 입력 수신, C1 타이머(HoldTimer), C2~C4 판정, C5 초기값 |
 | `src/vbc.h/c` | A 이태식 | 시스템 상태(VbcSystem), 모듈 호출 순서 |
-| `src/main.c` | A → F | 임시 데모. 입력/시연 방식이 정해지면 F가 교체 |
+| `src/main.c` | F 이태식 | 지금은 임시 데모. 입력/시연 방식으로 교체 예정 (`feature/input`) |
 | `src/wipers.h/c` | C 이지윤 | W1~W5 |
 | `src/lighting.h/c` | B 김성진 | L1~L6 |
 | `src/doors.h/c` | D 김의현 | D1~D3 (잠금) |
@@ -76,7 +76,7 @@ int main(void)
 
 ## 브랜치와 합치기
 ```
-feature/core, feature/lighting, feature/wipers, feature/doors, feature/dashboard
+feature/core, feature/lighting, feature/wipers, feature/doors, feature/dashboard, feature/input
         │ PR (리뷰어 = 교차 검증 담당, make test 결과 첨부)
         ▼
      develop ── 통합 테스트 ──► main (발표 기준본)

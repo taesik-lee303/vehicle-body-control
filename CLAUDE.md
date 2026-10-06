@@ -8,7 +8,7 @@
 - 구조, 모듈 작성 규칙, 테스트 작성법: `docs/c-structure.md`. 담당: `docs/roles.md`.
 
 ## 작업 규칙
-- `main`에 직접 커밋하지 않는다. 자기 담당 `feature/<모듈>` 브랜치(core, lighting, wipers, doors, dashboard)에서 작업하고 `develop`으로 PR한다.
+- `main`에 직접 커밋하지 않는다. 자기 담당 `feature/<모듈>` 브랜치(core, lighting, wipers, doors, dashboard, input)에서 작업하고 `develop`으로 PR한다.
 - 모듈은 `VbcContext`만 보고 판단한다. 시간은 `ctx->now`만 쓴다 (`time()`, `sleep()` 금지).
 - `src/common.h`, `src/vbc.h` 시그니처 변경은 A(코어)와 합의 후 `feature/core`에서만 한다.
 - PR은 작게, 맡은 범위 안의 파일만 바꾼다.
