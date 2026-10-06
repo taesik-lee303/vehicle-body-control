@@ -16,11 +16,16 @@
 ## 팀
 | 이름 | GitHub | 담당 |
 |---|---|---|
-| (팀장) | @taesik-lee303 | |
-| | | |
+| 김성진 (팀장) | @Dokbudoli | B 조명 (L1~L6) |
+| 이태식 (GitHub 관리) | @taesik-lee303 | A 코어·통합 (C1~C5), F 입력/시연·주행 |
+| 이지윤 | @Kenshi00 | C 와이퍼 (W1~W5) |
+| 김의현 | @uihyun-kim | D 도어·잠금 (D1~D3) |
+| 김주형 | @kjh082427 | E 계기판 (D4~D5) |
+
+자세한 역할과 검증자는 [docs/roles.md](docs/roles.md).
 
 ## 시작하기 (팀원)
-1. 팀장의 초대를 수락한다.
+1. GitHub 관리자(이태식)의 초대를 수락한다.
 2. `gh repo clone taesik-lee303/vehicle-body-control`
 3. 그 폴더에서 `claude` 실행
 
