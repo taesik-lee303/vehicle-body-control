@@ -1,57 +1,71 @@
 /*
- * main.c - 임시 데모
+ * main.c - 터미널 입력/시연
  * 담당: F (이태식)
  *
- * 입력 방법과 화면은 feature/input에서 교체한다.
- * 지금은 정해진 시나리오를 돌려 0.5초마다 출력을 찍는다.
+ *   ./build/vbc              대화형: 명령을 한 줄씩 입력
+ *   ./build/vbc <파일>       시나리오: 파일의 명령을 차례로 실행하고, expect가 하나라도
+ *                            틀리거나 잘못된 명령이 있으면 종료 코드 1
+ * 명령 목록: help 또는 docs/console.md
  */
 
 #include <stdio.h>
+#include <string.h>
 
-#include "vbc.h"
+#include "console.h"
 
-#define PERIOD_MS 50u
-
-static void print_header(void)
+static int run_interactive(void)
 {
-    printf("%6s | %5s %4s %6s %5s | %4s %4s %4s %4s | %-17s\n",
-           "t(ms)", "speed", "gear", "lux", "rain",
-           "head", "wipe", "lock", "C4", "warning");
-}
+    Console c;
+    char line[256];
 
-static void print_row(const VbcSystem *s, vbc_ms_t now)
-{
-    printf("%6u | %5d %4s %6d %5d | %4s %4s %4s %4s | %-17s\n",
-           (unsigned)now, (int)s->in.speed.value, vbc_gear_name(s->ctx.gear),
-           (int)s->in.lux.value, (int)s->in.rain.value,
-           s->out.headlight_on ? "ON" : "off", vbc_wiper_name(s->out.wiper),
-           s->out.door_locked ? "잠김" : "풀림", s->ctx.rx_lost ? "중단" : "-",
-           vbc_warning_name(s->out.warning));
-}
-
-int main(void)
-{
-    VbcSystem sys;
-    vbc_init(&sys);
-    vbc_set_light_switch(&sys.in, LIGHT_SW_AUTO);
-    vbc_set_wiper_switch(&sys.in, WIPER_SW_AUTO);
-
-    print_header();
-    for (vbc_ms_t t = 0; t <= 6000; t += PERIOD_MS) {
-        int32_t lux = t < 2000 ? 3000 : 300;  /* 2초에 어두워짐 */
-        int32_t speed = t < 3000 ? 0 : 30;    /* 3초에 출발 */
-        Gear gear = t < 2500 ? GEAR_P : GEAR_D;
-
-        vbc_rx_ignition(&sys.in, t, true);
-        vbc_rx_gear(&sys.in, t, gear);
-        vbc_rx_speed(&sys.in, t, speed);
-        vbc_rx_lux(&sys.in, t, lux);
-        vbc_rx_rain(&sys.in, t, 50);
-        vbc_set_door(&sys.in, DOOR_FL, t >= 4000 && t < 5000);
-
-        vbc_step(&sys, t);
-        if (t % 500 == 0)
-            print_row(&sys, t);
+    console_init(&c, stdout);
+    printf("차체 편의 기능 시뮬레이터 (VBC-SRS-001). help: 명령 목록, quit: 종료\n");
+    printf("시간은 wait 명령으로 흐른다. 시작: 시동 OFF, 기어 P, 속도 0, 조도 30000, 강우 0%%\n");
+    for (;;) {
+        printf("%u.%03us> ", (unsigned)(c.now / 1000u), (unsigned)(c.now % 1000u));
+        fflush(stdout);
+        if (!fgets(line, sizeof line, stdin))
+            break;
+        if (console_exec(&c, line) == CONSOLE_QUIT)
+            break;
     }
+    putchar('\n');
     return 0;
+}
+
+static int run_script(const char *path)
+{
+    Console c;
+    char line[256];
+    int errors = 0;
+    FILE *f = fopen(path, "r");
+
+    if (!f) {
+        perror(path);
+        return 2;
+    }
+    console_init(&c, stdout);
+    while (fgets(line, sizeof line, f)) {
+        line[strcspn(line, "\r\n")] = '\0';
+        if (line[0] != '\0')
+            printf("> %s\n", line);
+        ConsoleResult r = console_exec(&c, line);
+        if (r == CONSOLE_QUIT)
+            break;
+        if (r == CONSOLE_ERROR)
+            errors++;
+    }
+    fclose(f);
+
+    printf("== %s: expect 불일치 %d건, 명령 오류 %d건\n", path, c.expect_failures, errors);
+    return (c.expect_failures || errors) ? 1 : 0;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc > 2) {
+        fprintf(stderr, "사용법: %s [시나리오 파일]\n", argv[0]);
+        return 2;
+    }
+    return argc == 2 ? run_script(argv[1]) : run_interactive();
 }

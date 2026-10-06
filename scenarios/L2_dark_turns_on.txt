@@ -1,0 +1,12 @@
+# L2 어두우면 점등 (강의자료 48쪽 증명 예시)
+# 전제: 초기 상태에서 시작, 시동 ON, 조명 AUTO, 강우 0%, 와이퍼 정지
+# 기대: 2초에 조도 3000→300 → 2.9초 꺼짐, 3.0초 점등
+ign on
+light auto
+lux 3000
+wait 2
+lux 300                 # 2.000초: 어두워짐 (L2 1초 연속 조건 시작)
+wait 0.9
+expect headlight off    # 2.900초: 아직 1초가 안 됨
+wait 0.1
+expect headlight on     # 3.000초: 1초 연속 → 점등

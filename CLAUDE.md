@@ -4,7 +4,8 @@
 
 ## 빌드와 테스트
 - `make test`: 모든 테스트 실행. 변경 후 반드시 돌리고 결과를 PR에 붙인다.
-- `make run`: 데모 실행.
+- `make run`: 터미널 입력 실행. 명령은 `docs/console.md`.
+- `make scenarios`: `scenarios/*.txt` 시나리오 실행 (요구사항 증명·시연용).
 - 구조, 모듈 작성 규칙, 테스트 작성법: `docs/c-structure.md`. 담당: `docs/roles.md`.
 
 ## 작업 규칙

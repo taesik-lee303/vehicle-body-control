@@ -1,5 +1,6 @@
 # make        → build/vbc (데모)
 # make test   → tests/test_*.c 를 각각 빌드해서 실행 (파일을 추가하면 자동 포함)
+# make scenarios → scenarios/*.txt 를 차례로 실행 (expect 확인)
 # make clean
 
 CC ?= gcc
@@ -13,7 +14,7 @@ HEADERS := $(wildcard src/*.h)
 TEST_SRCS := $(wildcard tests/test_*.c)
 TEST_BINS := $(TEST_SRCS:tests/%.c=$(BUILD)/%)
 
-.PHONY: all test run clean
+.PHONY: all test run scenarios clean
 
 all: $(BUILD)/vbc
 
@@ -32,6 +33,12 @@ $(BUILD)/test_%: tests/test_%.c $(LIB_OBJS) $(wildcard tests/*.h) | $(BUILD)
 test: $(TEST_BINS)
 	@fail=0; for t in $(TEST_BINS); do ./$$t || fail=1; done; \
 	if [ $$fail -eq 0 ]; then echo "ALL TESTS PASSED"; else echo "SOME TESTS FAILED"; fi; \
+	exit $$fail
+
+scenarios: $(BUILD)/vbc
+	@fail=0; for f in scenarios/*.txt; do \
+	  if ./$(BUILD)/vbc $$f > $(BUILD)/$$(basename $$f .txt).log; then echo "  PASS $$f"; \
+	  else echo "  FAIL $$f  (로그: $(BUILD)/$$(basename $$f .txt).log)"; fail=1; fi; done; \
 	exit $$fail
 
 $(BUILD):
