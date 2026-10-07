@@ -1,6 +1,8 @@
 # make        → build/vbc (데모)
 # make test   → tests/test_*.c 를 각각 빌드해서 실행 (파일을 추가하면 자동 포함)
 # make scenarios → scenarios/*.txt 를 차례로 실행 (expect 확인)
+# make wasm      → sim/build/vbc.js (emcc 필요: source ~/emsdk/emsdk_env.sh)
+# make sim       → wasm 빌드 후 http://localhost:8000 에서 시뮬레이터 실행
 # make clean
 
 CC ?= gcc
@@ -14,7 +16,7 @@ HEADERS := $(wildcard src/*.h)
 TEST_SRCS := $(wildcard tests/test_*.c)
 TEST_BINS := $(TEST_SRCS:tests/%.c=$(BUILD)/%)
 
-.PHONY: all test run scenarios clean
+.PHONY: all test run scenarios wasm sim clean
 
 all: $(BUILD)/vbc
 
@@ -41,8 +43,25 @@ scenarios: $(BUILD)/vbc
 	  else echo "  FAIL $$f  (로그: $(BUILD)/$$(basename $$f .txt).log)"; fail=1; fi; done; \
 	exit $$fail
 
+SIM_OUT := sim/build/vbc.js
+EMCC ?= emcc
+EMFLAGS := -O2 -sMODULARIZE -sEXPORT_ES6 -sSINGLE_FILE -sENVIRONMENT=web \
+	-sEXPORTED_FUNCTIONS=_sim_init,_sim_exec,_sim_advance,_sim_state \
+	-sEXPORTED_RUNTIME_METHODS=cwrap,UTF8ToString
+
+wasm: $(SIM_OUT)
+
+$(SIM_OUT): $(LIB_SRCS) $(HEADERS)
+	@command -v $(EMCC) >/dev/null || { echo "emcc가 없습니다: source ~/emsdk/emsdk_env.sh"; exit 1; }
+	mkdir -p sim/build
+	$(EMCC) $(CPPFLAGS) -std=c11 $(EMFLAGS) -o $@ $(LIB_SRCS)
+
+sim: wasm
+	@echo "브라우저에서 http://localhost:8000 (종료: Ctrl+C)"
+	python3 -m http.server 8000 --directory sim
+
 $(BUILD):
 	mkdir -p $@
 
 clean:
-	rm -rf $(BUILD)
+	rm -rf $(BUILD) sim/build

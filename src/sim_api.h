@@ -1,0 +1,24 @@
+/*
+ * sim_api.h - 그래픽 시뮬레이션(브라우저)용 API
+ * 담당: F (이태식)
+ *
+ * WebAssembly로 컴파일해 JavaScript에서 부른다 (make wasm). 일반 gcc로도 빌드되어 make test로 확인한다.
+ * 화면은 판단하지 않는다: 명령 문자열을 넘기고, 상태 JSON을 받아 그리기만 한다.
+ */
+
+#ifndef SIM_API_H
+#define SIM_API_H
+
+/* quiet가 0이면 변화 로그("[2.900s] 전조등: 꺼짐 → 켜짐")를 stdout으로 낸다 (브라우저에서는 이벤트 로그) */
+void sim_init(int quiet);
+
+/* 콘솔 명령 한 줄 (docs/console.md). 반환: 0 OK, 1 오류, 2 quit */
+int sim_exec(const char *line);
+
+/* 시뮬레이션 시간을 ms 진행. 50ms 단위로 진행하고 남는 값은 다음 호출로 넘긴다 */
+void sim_advance(unsigned ms);
+
+/* 현재 입력·판정·출력을 JSON 한 줄로. 다음 호출 전까지 유효 */
+const char *sim_state(void);
+
+#endif /* SIM_API_H */
