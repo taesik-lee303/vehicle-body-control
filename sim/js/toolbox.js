@@ -113,5 +113,5 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios }) {
     $$('[data-rate]').forEach((b) => b.classList.toggle('active', Number(b.dataset.rate) === sim.rate));
   }
 
-  return { sync, toggle: () => root.classList.toggle('collapsed') };
+  return { sync, toggle: () => root.classList.toggle('collapsed'), playScenario: scenarios.play };
 }

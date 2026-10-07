@@ -1,109 +1,130 @@
-// main.js - M1: C 코어와 키보드 연결. 3D 화면·툴박스는 M2에서 추가 (docs/sim-plan.md).
-// 화면은 판단하지 않는다: 명령을 보내고 sim_state() JSON을 그린다.
+// main.js - 부팅, 시간 진행, 렌더 루프 (docs/sim-plan.md 3절).
+// 화면은 판단하지 않는다: 명령 문자열을 코어에 보내고, sim_state() JSON을 그린다.
 import { createCore } from './core-wasm.js';
+import { setupInput } from './input.js';
+import { setupToolbox } from './toolbox.js';
+import { renderHud } from './hud.js';
+import { ScenarioRunner, listScenarios } from './scenario.js';
+import { createWorld } from './scene/world.js';
 
-const logEl = document.getElementById('log');
-const log = (s) => { logEl.textContent += s + '\n'; logEl.scrollTop = logEl.scrollHeight; };
-
-const api = await createCore();
-api.onLog(log);
-
-function exec(cmd) {
-  log('> ' + cmd);
-  if (api.exec(cmd) === 1) document.getElementById('err').textContent = '명령 오류: ' + cmd;
-}
-
-api.init(0);
-exec('drive on');
-
-// ---- 키보드 ----
-const keys = new Set();
-let lastPedal = '';
-const LIGHT = ['off', 'auto', 'on'];
-const WIPER = ['off', 'auto', 'low', 'high'];
-const DOORS = ['fl', 'fr', 'rl', 'rr'];
-let paused = false, rate = 1;
 const RATES = [0.25, 0.5, 1, 2];
+const TICK_MS = 50;
+const MAX_FRAME_MS = 100;   // 탭이 멈췄다 돌아와도 시간을 한꺼번에 몰아치지 않게
 
-function updatePedal() {
-  const throttle = keys.has('Shift') ? 2 : keys.has('ArrowUp') ? 1 : 0;   // Shift 단독도 풀 스로틀
-  const brake = keys.has('ArrowDown') ? 1 : 0;
-  const p = `pedal ${throttle} ${brake}`;
-  if (p !== lastPedal) { api.exec(p); lastPedal = p; }   // 페달은 로그에 남기지 않음 (자주 바뀜)
+// ---- 이벤트 로그 ----
+const logEl = document.getElementById('log');
+function classify(line) {
+  const t = line.trim();
+  if (t.startsWith('>')) return 'cmd';
+  if (t.startsWith('✔')) return 'ok';
+  if (t.startsWith('✘')) return 'bad';
+  if (t.startsWith('!')) return 'err';
+  if (t.startsWith('#') || t.startsWith('==')) return 'info';
+  return 'change';
+}
+function log(text, cls = classify(text)) {
+  const div = document.createElement('div');
+  div.className = cls;
+  div.textContent = text;
+  logEl.append(div);
+  while (logEl.childElementCount > 600) logEl.firstChild.remove();
+  logEl.scrollTop = logEl.scrollHeight;
+}
+document.getElementById('log-clear').addEventListener('click', () => { logEl.textContent = ''; });
+
+// ---- 부팅 ----
+const loading = document.getElementById('loading');
+let core;
+try {
+  core = await createCore();
+} catch (err) {
+  loading.classList.add('error');
+  loading.textContent = `C 코어를 불러오지 못했습니다.\n${err}\n\n저장소 루트에서 make sim 으로 실행했는지, sim/build/vbc.js가 있는지 확인하세요 (make wasm).`;
+  throw err;
+}
+core.onLog((line) => log(line));
+
+const sim = { paused: false, rate: 1, carry: 0 };
+let state;
+
+function exec(cmd) { log('> ' + cmd, 'cmd'); return core.exec(cmd); }
+function sendQuiet(cmd) { return core.exec(cmd); }   // 페달·슬라이더 드래그처럼 자주 바뀌는 것은 로그에 남기지 않음
+
+const scenario = new ScenarioRunner(core, log, () => {
+  if (document.getElementById('drive').checked) sendQuiet('drive on');   // 시나리오가 끝나면 다시 운전 가능하게
+  input.resync();
+});
+
+// 시뮬레이션 시간을 ms 진행. 시나리오 재생 중이면 시나리오가 wait 남은 시간만큼 쓴다
+function advance(ms) {
+  if (scenario.active) { scenario.update(ms); return; }
+  sim.carry += ms;
+  const whole = Math.floor(sim.carry);   // 코어는 정수 ms만 받음. 소수는 모아 둔다
+  sim.carry -= whole;
+  if (whole > 0) core.advance(whole);
 }
 
-addEventListener('keydown', (e) => {
-  if (e.target.tagName === 'INPUT') return;
-  keys.add(e.key);
-  if (e.repeat) { updatePedal(); return; }
-  const s = state;
-  const k = e.key.toLowerCase();
-  if (k === 'i') exec(`ign ${s.in.ign ? 'off' : 'on'}`);
-  else if ('prnd'.includes(k) && k.length === 1) exec(`gear ${k}`);
-  else if (k === 'l') exec(`light ${LIGHT[(LIGHT.indexOf(s.in.light.toLowerCase()) + 1) % 3]}`);
-  else if (k === 'w') exec(`wiper ${WIPER[(WIPER.indexOf(s.in.wiper.toLowerCase()) + 1) % 4]}`);
-  else if ('1234'.includes(k) && k.length === 1) {
-    const i = Number(k) - 1;
-    exec(`door ${DOORS[i]} ${s.in.doors[i] ? 'close' : 'open'}`);
-  } else if (k === ' ') { paused = !paused; log(paused ? '일시정지' : '재개'); }
-  else if (k === '.' && paused) api.advance(50);                     // 일시정지 중 한 틱
-  else if (k === '[' || k === ']') {
-    rate = RATES[Math.max(0, Math.min(3, RATES.indexOf(rate) + (k === ']' ? 1 : -1)))];
-    log(`배속 ${rate}×`);
-  }
-  if (e.key.startsWith('Arrow') || k === ' ') e.preventDefault();
-  updatePedal();
-});
-addEventListener('keyup', (e) => { keys.delete(e.key); updatePedal(); });
-addEventListener('blur', () => { keys.clear(); updatePedal(); });  // 창을 떠나면 페달 놓기
+const actions = {
+  togglePause() { sim.paused = !sim.paused; log(sim.paused ? '일시정지 (시뮬 시각 멈춤)' : '재개', 'info'); },
+  tick() { if (sim.paused) advance(TICK_MS); },
+  setRate(r) { sim.rate = r; log(`배속 ${r}×`, 'info'); },
+  rateStep(d) { actions.setRate(RATES[Math.max(0, Math.min(RATES.length - 1, RATES.indexOf(sim.rate) + d))]); },
+  reset() {
+    scenario.stop();
+    core.init(false);
+    sim.carry = 0;
+    log('== 리셋: 초기 상태(C5), 시각 0', 'info');
+    if (document.getElementById('drive').checked) sendQuiet('drive on');
+    input.resync();
+  },
+  resyncInput: () => input.resync(),
+  nextCamera() { log(`카메라: ${world.nextCamera()}`, 'info'); },
+  toggleToolbox: () => toolbox.toggle(),
+  toggleHelp() { const h = document.getElementById('help'); h.hidden = !h.hidden; },
+  closeHelp() { document.getElementById('help').hidden = true; },
+};
 
-document.getElementById('cmdform').addEventListener('submit', (e) => {
-  e.preventDefault();
-  const input = document.getElementById('cmd');
-  if (input.value.trim()) exec(input.value.trim());
-  input.value = '';
+const input = setupInput({ exec, sendQuiet, getState: () => state, actions });
+const toolbox = setupToolbox({
+  exec, sendQuiet, sim, actions,
+  scenarios: {
+    list: () => listScenarios('../scenarios/'),
+    async play(name) {
+      const res = await fetch('../scenarios/' + encodeURIComponent(name));
+      if (!res.ok) { log(`  ! 시나리오를 읽지 못했습니다: ${name}`, 'err'); return; }
+      sim.carry = 0;
+      if (sim.paused) actions.togglePause();
+      scenario.start(name, await res.text());
+    },
+    stop: () => scenario.stop(),
+  },
 });
+const world = createWorld(document.getElementById('view'));
+const hudEl = document.getElementById('hud');
 
-// ---- 시간 진행: 벽시계 × 배속만큼 시뮬레이션 시간을 흘린다 ----
-let state = api.state();
+core.init(false);
+sendQuiet('drive on');
+state = core.state();
+loading.remove();
+log('준비됨. I 시동 → D 기어 → ↑ 가속. H 도움말', 'info');
+
+// URL로 시작 장면 지정 (발표용·확인용): ?cmd=lux 300&cmd=rain 70&wait=3&scenario=R5_top_speed.txt&cam=1
+const params = new URLSearchParams(location.search);
+for (const c of params.getAll('cmd')) exec(c);
+if (params.has('wait')) core.advance(Math.round(Number(params.get('wait')) * 1000));
+for (let i = 0; i < Number(params.get('cam') || 0); i++) actions.nextCamera();
+if (params.has('scenario')) toolbox.playScenario(params.get('scenario'));
+
+// ---- 루프: 벽시계 × 배속만큼 시뮬 시간을 흘리고, 상태를 읽어 그린다 ----
 let last = performance.now();
-let carry = 0;
 function frame(now) {
-  const dt = Math.min(now - last, 250); last = now;           // 탭이 멈췄다 돌아와도 한꺼번에 몰아치지 않게
-  if (!paused) {
-    carry += dt * rate;
-    const ms = Math.floor(carry); carry -= ms;
-    if (ms > 0) api.advance(ms);
-  }
-  state = api.state();
-  render(state);
+  const dt = Math.min(now - last, MAX_FRAME_MS);
+  last = now;
+  if (!sim.paused) advance(dt * sim.rate);
+  state = core.state();
+  toolbox.sync(state);
+  renderHud(hudEl, state, sim, scenario.active ? scenario.name : '');
+  world.update(state, sim.paused ? 0 : (dt / 1000) * sim.rate, input.lateral());
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
-
-// ---- 표시 ----
-const yes = (v, cls = 'on') => v ? `<span class="${cls}">켜짐</span>` : '꺼짐';
-function rows(el, list) { el.innerHTML = list.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join(''); }
-function render(s) {
-  const doors = ['FL', 'FR', 'RL', 'RR'].map((n, i) => s.in.doors[i] ? `<span class="bad">${n}</span>` : n).join(' ');
-  rows(document.getElementById('in'), [
-    ['시각', `${(s.t / 1000).toFixed(2)} s ${paused ? '(일시정지)' : rate !== 1 ? `(${rate}×)` : ''}`],
-    ['시동 · 기어', `${s.in.ign ? '<span class="on">ON</span>' : 'OFF'} · ${s.in.gear}`],
-    ['속도', `${(s.in.speed_mkmh / 1000).toFixed(1)} km/h`],
-    ['페달', `스로틀 ${s.in.throttle} · 브레이크 ${s.in.brake}`],
-    ['조도 · 강우', `${s.in.lux} lux · ${s.in.rain} %`],
-    ['도어 열림', doors],
-    ['조명 SW · 와이퍼 SW', `${s.in.light} · ${s.in.wiper}`],
-    ['송신 중단', s.in.cut ? `<span class="bad">${s.in.cut}</span>` : '없음'],
-  ]);
-  rows(document.getElementById('out'), [
-    ['전조등', yes(s.out.headlight)],
-    ['와이퍼', s.out.wiper],
-    ['도어 잠금', s.out.locked ? '<span class="on">잠김</span>' : '풀림'],
-    ['계기판 경고', s.out.warning === 'none' ? '없음' : `<span class="bad">${s.out.warning}</span>`],
-    ['조도 고장 표시', yes(s.out.lux_lamp, 'bad')],
-    ['강우 고장 표시', yes(s.out.rain_lamp, 'bad')],
-    ['(판정) 수신 중단', s.ctx.rx_lost ? '<span class="bad">예</span>' : '아니오'],
-    ['(판정) 유효한 속도', s.ctx.speed_valid ? '<span class="ok">예</span>' : '아니오'],
-  ]);
-}

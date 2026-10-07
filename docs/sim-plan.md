@@ -1,7 +1,7 @@
 # 시연용 시뮬레이션 구현 계획 (F 입력/시연)
 
 담당: 이태식 (F)   검증: C (이지윤)   브랜치: `feature/sim` (PR #6 `feature/input`이 develop에 머지된 뒤 develop에서 분기)
-상태: 초안 v2, 2026-10-07. M0·M1 완료(PR #7). 팀 검토 전. 12절의 결정 사항을 정한 뒤 M0부터 시작한다.
+상태: 초안 v2, 2026-10-07. M0·M1·M2 완료(PR #7). 팀 검토 전. 12절의 결정 사항을 정한 뒤 M0부터 시작한다.
 
 ## 0. 요약
 
@@ -233,7 +233,7 @@
 |---|---|---|---|
 | M0 주행 모델 ✅ | `drive.c`, 콘솔 `drive`/`pedal`/`expect speed` 명령, `test_drive.c`, R 시나리오 5개, `docs/console.md` 갱신 | `make test` 통과, `make scenarios`에서 R 시나리오 PASS. 그래픽 없음 | 0.5일 |
 | M1 코어 연결 ✅ (1안, emsdk 6.0.11) | `sim_api.c`. 1안: `apt install emscripten` → `make wasm`. 안 되면 2안: `stdio_main.c` + `bridge.py`. 숫자만 있는 임시 페이지 | 브라우저에서 ↑를 누르면 속도 숫자가 오르고, 툴박스 없이 콘솔 입력창으로 `lux 300` 넣고 3초 뒤 로그에 "전조등: 꺼짐 → 켜짐"(조명 모듈 머지 후) | 1일 |
-| M2 장면·툴박스 | 박스 차·도로·추적 카메라, 툴박스 전부, 계기판, 이벤트 로그, 일시정지·한 틱·배속, 리셋 | 툴박스 조작 결과가 터미널(`make run`)과 같은 시각에 같은 로그. `L2_dark_turns_on` 재생 시 2.900s ✔ / 3.000s ✔ | 1일 |
+| M2 장면·툴박스 ✅ | 박스 차·도로·추적 카메라, 툴박스 전부, 계기판, 이벤트 로그, 일시정지·한 틱·배속, 리셋 | 툴박스 조작 결과가 터미널(`make run`)과 같은 시각에 같은 로그. `L2_dark_turns_on` 재생 시 2.900s ✔ / 3.000s ✔ | 1일 |
 | M3 현실감 | glTF 차, HDRI·`Sky`·조도 연동, 비·안개·젖은 노면, 전조등·블룸, 와이퍼·도어 애니, 카메라 3종, 화질 단계 | 밤 + 비 + 와이퍼 + 전조등이 한 화면에 보임. 표준 화질 내장 GPU 30fps 이상 | 1~2일 |
 | M4 시연 준비 | 시나리오 재생 다듬기, 도움말, 효과음, 발표 대본(어떤 툴박스로 어떤 요구사항을 보일지), 리허설, `docs/verification.md`에 R 행 추가 | 발표 대본대로 10분 리허설 완주. `sim/` 폴더를 다른 노트북에 복사해 열림 | 0.5일 |
 
@@ -262,6 +262,8 @@ make sim                         # 위와 같음. index.html 이 ws 연결을 �
 ```
 
 emcc 플래그(참고): `-O2 -sMODULARIZE=1 -sEXPORT_ES6=1 -sSINGLE_FILE=1 -sEXPORTED_FUNCTIONS=_sim_init,_sim_exec,_sim_advance,_sim_state,_malloc,_free -sEXPORTED_RUNTIME_METHODS=ccall,cwrap,UTF8ToString,stringToUTF8`. `console.c`가 `stdout`에 쓰는 한 줄은 모듈 생성 시 `print` 콜백으로 받는다(UTF-8 한글 그대로 옴).
+
+URL로 시작 장면 지정(발표·확인용): `http://localhost:8080/sim/?cmd=lux 300&cmd=rain 70&cmd=light on&cam=1&scenario=R4_brake_priority.txt` (`cmd` 여러 번, `wait` 초, `cam` 0 추적·1 정면·2 위).
 
 발표용: `sim/` 폴더(vendor, assets, build 포함)와 `scenarios/`를 복사하면 어느 노트북에서든 열린다. 1안이면 WSL이 없어도 된다.
 
