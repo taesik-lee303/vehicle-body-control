@@ -1,0 +1,18 @@
+# R2 기어 변경은 정지 상태(속도 0)에서만 된다.
+drive on
+ign on
+gear d
+pedal 1 0
+wait 2
+expect speed 20
+gear p                  # 주행 중 → 거부
+expect gear d
+gear r                  # 주행 중 → 거부
+expect gear d
+pedal 0 1
+wait 0.5
+expect speed 0
+gear p                  # 정지 → 허용
+expect gear p
+gear r
+expect gear r

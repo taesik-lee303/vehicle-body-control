@@ -1,0 +1,19 @@
+# R4 브레이크를 밟으면 속도가 줄어 0에서 멈추고, 가속도 브레이크도 없으면 천천히 줄어든다.
+#    가속과 브레이크가 함께 입력되면 브레이크가 우선한다.
+drive on
+ign on
+gear d
+pedal 2 0
+wait 4
+expect speed 100        # 풀 스로틀 25 km/h/s × 4초
+pedal 0 0
+wait 2
+expect speed 90         # 타력 5 km/h/s × 2초
+pedal 2 1               # 가속 + 브레이크 동시
+wait 1
+expect speed 50         # 브레이크 우선: 40 km/h/s 감속
+pedal 0 1
+wait 1.25
+expect speed 0          # 0에서 멈춤
+wait 1
+expect speed 0          # 음수로 내려가지 않음

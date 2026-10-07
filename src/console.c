@@ -24,6 +24,7 @@ typedef struct {
 } Watch;
 
 static const char *const WIPER_WORDS[] = {"stop", "int", "low", "high"};
+static const char *const GEAR_WORDS[] = {"p", "r", "n", "d"};
 static const char *const WARNING_WORDS[] = {"none", "door", "lux", "rain"};
 
 /* ---- 출력 도우미 ---- */
@@ -162,6 +163,10 @@ void console_advance(Console *c, vbc_ms_t ms)
 
     while (c->now + CONSOLE_TICK_MS <= end) {
         c->now += CONSOLE_TICK_MS;
+        if (c->drive_on) {
+            drive_step(&c->drive, CONSOLE_TICK_MS);
+            c->panel.speed = drive_speed_kmh(&c->drive);
+        }
         send_signals(c, c->now, CON_ALL);
         step_now(c);
     }
@@ -179,6 +184,8 @@ void console_init(Console *c, FILE *out)
     c->now = 0;
     c->out = out;
     c->expect_failures = 0;
+    drive_init(&c->drive);
+    c->drive_on = false;
 
     send_signals(c, 0, CON_ALL);
     vbc_step(&c->sys, 0);
@@ -263,6 +270,11 @@ static ConsoleResult cmd_gear(Console *c, const char *a)
 
     if (g < 0)
         return err(c, "사용법: gear P|R|N|D");
+    if (c->drive_on && !drive_request_gear(&c->drive, (Gear)g)) {
+        say(c, "  ✘ 거부(R2): 기어 변경은 정지 상태(속도 0)에서만 됩니다. 현재 %s, 속도 %dkm/h\n",
+            vbc_gear_name(c->drive.gear), (int)c->panel.speed);
+        return CONSOLE_OK;
+    }
     c->panel.gear = (Gear)g;
     apply_now(c, CON_GEAR);
     return CONSOLE_OK;
@@ -277,6 +289,39 @@ static ConsoleResult cmd_number(Console *c, const char *a, int32_t *field, unsig
         return err(c, "사용법: %s", usage);
     *field = v;
     apply_now(c, sig);
+    return CONSOLE_OK;
+}
+
+/* drive on|off: 속도·기어·시동을 운전 조작으로 만들지(on) 직접 입력할지(off) */
+static ConsoleResult cmd_drive(Console *c, const char *a)
+{
+    int on = parse_on_off(a);
+
+    if (on < 0)
+        return err(c, "사용법: drive on|off");
+    if (on && !c->drive_on) {
+        drive_init(&c->drive);
+        c->drive.ignition = c->panel.ignition;
+        c->drive.gear = c->panel.gear;
+        drive_set_speed_kmh(&c->drive, c->panel.speed);
+        c->panel.speed = drive_speed_kmh(&c->drive);
+    }
+    c->drive_on = on;
+    drive_set_pedals(&c->drive, THROTTLE_NONE, false);
+    say(c, "  주행 모델 %s\n", on ? "켜짐 (pedal, gear, ign으로 운전)" : "꺼짐 (speed로 직접 입력)");
+    return CONSOLE_OK;
+}
+
+/* pedal <스로틀 0|1|2> <브레이크 0|1>: 누르고 있는 상태 (다음 pedal 명령까지 유지) */
+static ConsoleResult cmd_pedal(Console *c, const char *t, const char *b)
+{
+    int32_t th, br;
+
+    if (!c->drive_on)
+        return err(c, "pedal은 drive on 이후에 쓸 수 있습니다");
+    if (!parse_int(t, &th) || !parse_int(b, &br) || th < 0 || th > 2 || br < 0 || br > 1)
+        return err(c, "사용법: pedal <스로틀 0|1|2> <브레이크 0|1>  (2 = 풀 스로틀)");
+    drive_set_pedals(&c->drive, (Throttle)th, br != 0);
     return CONSOLE_OK;
 }
 
@@ -348,7 +393,23 @@ static ConsoleResult cmd_expect(Console *c, const char *item, const char *want)
     if (!item || !want)
         return err(c, "사용법: expect <항목> <기대값>  (help 참고)");
 
+    if (ieq(item, "speed")) { /* 지금 보내는 속도(km/h)와 숫자로 비교 */
+        int32_t w;
+        if (!parse_int(want, &w))
+            return err(c, "speed의 기대값은 숫자입니다: %s", want);
+        if (c->panel.speed == w) {
+            say(c, "  ✔ speed %d  (%u.%03us)\n", (int)w, sec_part(c->now), ms_part(c->now));
+        } else {
+            c->expect_failures++;
+            say(c, "  ✘ speed: 기대 %d, 실제 %d  (%u.%03us)\n", (int)w, (int)c->panel.speed,
+                sec_part(c->now), ms_part(c->now));
+        }
+        return CONSOLE_OK;
+    }
+
     if (ieq(item, "headlight")) actual = o->headlight_on;
+    else if (ieq(item, "ign")) actual = c->panel.ignition;
+    else if (ieq(item, "gear")) { actual = (int)c->panel.gear; words = GEAR_WORDS; count = 4; }
     else if (ieq(item, "luxlamp")) actual = o->lux_fault_lamp;
     else if (ieq(item, "rainlamp")) actual = o->rain_fault_lamp;
     else if (ieq(item, "lock")) actual = o->door_locked;
@@ -356,7 +417,7 @@ static ConsoleResult cmd_expect(Console *c, const char *item, const char *want)
     else if (ieq(item, "wiper")) { actual = (int)o->wiper; words = WIPER_WORDS; count = 4; }
     else if (ieq(item, "warning")) { actual = (int)o->warning; words = WARNING_WORDS; count = 4; }
     else
-        return err(c, "expect 항목: headlight luxlamp wiper rainlamp lock warning rxlost");
+        return err(c, "expect 항목: headlight luxlamp wiper rainlamp lock warning rxlost ign gear speed");
 
     expected = words ? parse_word(want, words, count) : parse_on_off(want);
     if (expected < 0)
@@ -401,14 +462,25 @@ ConsoleResult console_exec(Console *c, const char *line)
         int on = parse_on_off(a1);
         if (on < 0)
             return err(c, "사용법: ign on|off");
+        if (c->drive_on && !drive_request_ignition(&c->drive, on)) {
+            say(c, "  ✘ 거부(R1): 시동은 정지 상태(속도 0)에서만 켜고 끌 수 있습니다. 속도 %dkm/h\n",
+                (int)c->panel.speed);
+            return CONSOLE_OK;
+        }
         c->panel.ignition = on;
         apply_now(c, CON_IGNITION);
         return CONSOLE_OK;
     }
     if (ieq(cmd, "gear"))
         return cmd_gear(c, a1);
+    if (ieq(cmd, "speed") && c->drive_on)
+        return err(c, "drive on 중에는 속도가 페달로 정해집니다. 직접 입력하려면 drive off");
     if (ieq(cmd, "speed"))
         return cmd_number(c, a1, &c->panel.speed, CON_SPEED, "speed <km/h>  (유효 0~250)");
+    if (ieq(cmd, "drive"))
+        return cmd_drive(c, a1);
+    if (ieq(cmd, "pedal"))
+        return cmd_pedal(c, a1, a2);
     if (ieq(cmd, "lux"))
         return cmd_number(c, a1, &c->panel.lux, CON_LUX, "lux <lux>  (유효 0~60000)");
     if (ieq(cmd, "rain"))
@@ -506,6 +578,10 @@ void console_print_help(const Console *c)
         "    speed <km/h>            속도 (유효 0~250, 범위 밖 값도 그대로 보냄)\n"
         "    lux <lux>               조도 (유효 0~60000)\n"
         "    rain <%%>                강우량 (유효 0~100)\n"
+        "  [주행 모델 R1~R5]\n"
+        "    drive on|off            on: 속도·기어·시동을 운전 조작으로 만듦 (off: speed로 직접 입력)\n"
+        "    pedal <0|1|2> <0|1>     스로틀(0 없음, 1 보통, 2 풀) 브레이크(0|1). 다음 pedal까지 유지\n"
+        "                            ign, gear는 정지 상태에서만 바뀜 (R1, R2)\n"
         "  [운전자 조작]\n"
         "    door FL|FR|RL|RR|ALL open|close\n"
         "    light off|auto|on       조명 스위치\n"
@@ -516,7 +592,8 @@ void console_print_help(const Console *c)
         "  [시간·확인]\n"
         "    wait <초>               시간 진행 (0.05초 단위). 그 사이 바뀐 출력을 시각과 함께 표시\n"
         "    show                    입력·판정·출력 전체 보기\n"
-        "    expect <항목> <값>      기대 확인. 항목: headlight luxlamp rainlamp lock rxlost (on|off),\n"
+        "    expect <항목> <값>      기대 확인. 항목: headlight luxlamp rainlamp lock rxlost ign (on|off),\n"
+        "                            speed (km/h 숫자), gear (p|r|n|d),\n"
         "                            wiper (stop|int|low|high), warning (none|door|lux|rain)\n"
         "    reset                   초기 상태(C5)로\n"
         "    help, quit\n"

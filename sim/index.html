@@ -1,0 +1,123 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VBC 시뮬레이터</title>
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
+</head>
+<body>
+<canvas id="view"></canvas>
+
+<aside id="toolbox">
+  <header>
+    <strong>툴박스</strong>
+    <span class="hint">Tab 접기 · H 도움말</span>
+  </header>
+  <div class="tb-body">
+    <div class="row">
+      <label class="switch"><input type="checkbox" id="drive" checked> 주행 모드</label>
+      <label id="speed-field" hidden>속도 <input type="number" id="speed-input" min="-10" max="300" value="0"> km/h</label>
+    </div>
+
+    <div class="group">
+      <div class="label">강우량 <output id="rain-val">0 %</output></div>
+      <input type="range" id="rain" min="0" max="100" value="0">
+    </div>
+
+    <div class="group">
+      <div class="label">조도 <output id="lux-val">30000 lx</output></div>
+      <input type="range" id="lux" min="0" max="1000" value="937">
+      <div class="seg" id="lux-presets">
+        <button data-lux="30000">낮</button><button data-lux="5000">흐림</button><button data-lux="1200">황혼</button><button data-lux="300">밤</button><button data-lux="0">칠흑</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">문 덜 닫힘</div>
+      <div class="checks">
+        <label><input type="checkbox" data-door="0"> FL</label>
+        <label><input type="checkbox" data-door="1"> FR</label>
+        <label><input type="checkbox" data-door="2"> RL</label>
+        <label><input type="checkbox" data-door="3"> RR</label>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">조명 스위치</div>
+      <div class="seg" id="light-sw"><button data-light="off">OFF</button><button data-light="auto">AUTO</button><button data-light="on">ON</button></div>
+    </div>
+
+    <div class="group">
+      <div class="label">와이퍼 스위치</div>
+      <div class="seg" id="wiper-sw"><button data-wiper="off">OFF</button><button data-wiper="auto">AUTO</button><button data-wiper="low">LOW</button><button data-wiper="high">HIGH</button></div>
+    </div>
+
+    <div class="group">
+      <div class="label">고장 주입</div>
+      <div class="checks">
+        <label><input type="checkbox" data-cut="lux"> 조도 끊김</label>
+        <label><input type="checkbox" data-cut="rain"> 강우 끊김</label>
+        <label><input type="checkbox" data-cut="vehicle"> 차량 상태 끊김</label>
+        <label><input type="checkbox" data-oor="lux"> 조도 범위 밖</label>
+        <label><input type="checkbox" data-oor="rain"> 강우 범위 밖</label>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">시간</div>
+      <div class="seg">
+        <button id="play" title="Space">∥</button><button id="tick" title=".">한 틱</button>
+        <button data-rate="0.25">0.25×</button><button data-rate="0.5">0.5×</button><button data-rate="1">1×</button><button data-rate="2">2×</button>
+      </div>
+    </div>
+
+    <div class="group">
+      <div class="label">시나리오</div>
+      <div class="row">
+        <select id="scenario"><option value="">불러오는 중…</option></select>
+        <button id="scenario-play">▶ 재생</button><button id="scenario-stop">■</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <button id="reset">리셋 (C5)</button>
+      <button id="help-btn">도움말</button>
+    </div>
+  </div>
+</aside>
+
+<section id="log-panel">
+  <header><strong>이벤트 로그</strong><button id="log-clear">지우기</button></header>
+  <div id="log"></div>
+</section>
+
+<footer id="hud"></footer>
+
+<div id="help" hidden>
+  <h2>조작</h2>
+  <table>
+    <tr><td><kbd>↑</kbd></td><td>가속 (보통)</td></tr>
+    <tr><td><kbd>Shift</kbd></td><td>강한 가속 (풀 스로틀)</td></tr>
+    <tr><td><kbd>↓</kbd></td><td>브레이크 (가속과 같이 누르면 브레이크 우선, R4)</td></tr>
+    <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>차선 안에서 좌우 이동 (화면 연출, 코어로 보내지 않음)</td></tr>
+    <tr><td><kbd>I</kbd></td><td>시동 켜기/끄기 (정지 상태에서만, R1)</td></tr>
+    <tr><td><kbd>P</kbd> <kbd>R</kbd> <kbd>N</kbd> <kbd>D</kbd></td><td>기어 (정지 상태에서만, R2)</td></tr>
+    <tr><td><kbd>L</kbd> / <kbd>W</kbd></td><td>조명 스위치 / 와이퍼 스위치 순환</td></tr>
+    <tr><td><kbd>1</kbd>~<kbd>4</kbd></td><td>도어 FL FR RL RR 열림/닫힘</td></tr>
+    <tr><td><kbd>Space</kbd> / <kbd>.</kbd></td><td>일시정지 / 일시정지 중 한 틱(0.05초)</td></tr>
+    <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>배속 0.25 · 0.5 · 1 · 2</td></tr>
+    <tr><td><kbd>C</kbd></td><td>카메라: 추적 → 정면 → 위</td></tr>
+    <tr><td><kbd>Tab</kbd> / <kbd>H</kbd></td><td>툴박스 접기 / 이 도움말</td></tr>
+  </table>
+  <p>시간은 시뮬레이션 시각입니다. 일시정지 중에는 시각이 흐르지 않아 수신 중단(C4)도 생기지 않습니다.
+  전조등·와이퍼·잠금·경고는 모두 C 코어(<code>vbc_step</code>)의 출력을 그대로 그립니다.</p>
+  <p class="dim">H 또는 Esc로 닫기</p>
+</div>
+
+<div id="loading">C 코어 불러오는 중…</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>

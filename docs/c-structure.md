@@ -24,6 +24,7 @@ make clean
 | `src/common.h/c` | A 이태식 | 타입, 입력 수신, C1 타이머(HoldTimer), C2~C4 판정, C5 초기값 |
 | `src/vbc.h/c` | A 이태식 | 시스템 상태(VbcSystem), 모듈 호출 순서 |
 | `src/console.h/c` | F 이태식 | 터미널 명령 해석, 주기 입력 재송신, 시간 진행, expect |
+| `src/drive.h/c` | F 이태식 | 주행 모델 R1~R5 (페달·기어·시동 → 속도). 코어와 독립 |
 | `src/main.c` | F 이태식 | 대화형 / 시나리오 파일 실행 |
 | `scenarios/*.txt` | 각 담당 | 요구사항별 시연·증명 시나리오 |
 | `src/wipers.h/c` | C 이지윤 | W1~W5 |
