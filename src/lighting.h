@@ -19,9 +19,12 @@
 
 #include "common.h"
 
-/* 모듈이 주기 사이에 기억할 값. 필요한 필드(HoldTimer 등)는 담당자가 추가한다 */
+/* 모듈이 주기 사이에 기억할 값 */
 typedef struct {
-    bool headlight_on; /* 직전 상태 (L3 "직전 상태 유지") */
+    bool headlight_on;   /* 직전 상태 (L3 "직전 상태 유지") */
+    HoldTimer dark;      /* L2: 조도 < 1000 lux */
+    HoldTimer bright;    /* L3: 조도 > 1500 lux */
+    HoldTimer wiper_run; /* L6: 와이퍼 작동 중 */
 } LightingState;
 
 void lighting_init(LightingState *st);
