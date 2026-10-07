@@ -18,6 +18,7 @@
 /* 모듈이 주기 사이에 기억할 값. 필요한 필드는 담당자가 추가한다 */
 typedef struct {
     WiperLevel level;
+    WiperSwitch last_switch; /* 마지막으로 받은 정상 스위치 값 (SWR-W4-005) */
 } WiperState;
 
 void wipers_init(WiperState *st);
