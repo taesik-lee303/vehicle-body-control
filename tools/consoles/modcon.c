@@ -36,16 +36,31 @@ static const char *sw_name(const char *const *names, int n, int v)
 
 /* ---- 입력 읽기 ---- */
 
+/* 한 줄 읽기. 파일로 입력할 때는 '#'로 시작하는 줄을 설명으로 보고 그대로 보여 준 뒤 건너뛴다 */
 static bool read_line(const char *prompt, char *buf, size_t size)
 {
+    char line[1024];   /* 긴 줄(설명 등)도 한 번에 읽어, 남은 부분이 다음 입력으로 넘어가지 않게 */
+
     printf("%s", prompt);
     fflush(stdout);
-    if (!fgets(buf, (int)size, stdin))
-        return false;
-    buf[strcspn(buf, "\r\n")] = '\0';
-    if (!isatty(0))   /* 파일·파이프로 입력할 때는 입력을 화면에 보여 줌 */
-        printf("%s\n", buf);
-    return true;
+    for (;;) {
+        if (!fgets(line, sizeof line, stdin))
+            return false;
+        if (!strchr(line, '\n')) {   /* 그래도 넘치면 줄 끝까지 버린다 */
+            int ch;
+            while ((ch = getchar()) != '\n' && ch != EOF)
+                ;
+        }
+        line[strcspn(line, "\r\n")] = '\0';
+        if (!isatty(0) && line[0] == '#') {   /* 예제 파일의 설명 */
+            printf("\n%s\n%s", line, prompt);
+            continue;
+        }
+        if (!isatty(0))
+            printf("%s\n", line);   /* 파일·파이프로 입력할 때는 입력을 화면에 보여 줌 */
+        snprintf(buf, size, "%s", line);
+        return true;
+    }
 }
 
 static bool ieq(const char *a, const char *b)
