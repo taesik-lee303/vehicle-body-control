@@ -27,7 +27,7 @@
 ## 시작하기 (팀원)
 1. GitHub 관리자(이태식)의 초대를 수락한다.
 2. `gh repo clone taesik-lee303/vehicle-body-control`
-3. 그 폴더에서 `claude` 실행
+3. 그 폴더에서 `claude` 실행 (사용법과 확인 방법: [docs/claude-code-guide.md](docs/claude-code-guide.md))
 
 ## 협업 규칙
 - `main`에 직접 push하지 않는다. 브랜치 → 작은 PR → 동료 리뷰 → 머지.

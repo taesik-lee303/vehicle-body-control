@@ -8,3 +8,4 @@ node_modules/
 venv/
 .claude/settings.local.json
 !docs/spec/*.pdf
+CLAUDE.local.md
