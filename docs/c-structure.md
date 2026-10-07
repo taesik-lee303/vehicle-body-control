@@ -3,7 +3,8 @@
 ## 빌드와 테스트
 ```bash
 make          # build/vbc (임시 데모)
-make run      # 데모 실행
+make run      # 터미널 입력 실행 (명령: docs/console.md)
+make scenarios # scenarios/*.txt 실행 (expect 확인)
 make test     # tests/test_*.c 전부 빌드·실행. 새 test_*.c 파일은 자동 포함
 make clean
 ```
@@ -22,7 +23,9 @@ make clean
 |---|---|---|
 | `src/common.h/c` | A 이태식 | 타입, 입력 수신, C1 타이머(HoldTimer), C2~C4 판정, C5 초기값 |
 | `src/vbc.h/c` | A 이태식 | 시스템 상태(VbcSystem), 모듈 호출 순서 |
-| `src/main.c` | F 이태식 | 지금은 임시 데모. 입력/시연 방식으로 교체 예정 (`feature/input`) |
+| `src/console.h/c` | F 이태식 | 터미널 명령 해석, 주기 입력 재송신, 시간 진행, expect |
+| `src/main.c` | F 이태식 | 대화형 / 시나리오 파일 실행 |
+| `scenarios/*.txt` | 각 담당 | 요구사항별 시연·증명 시나리오 |
 | `src/wipers.h/c` | C 이지윤 | W1~W5 |
 | `src/lighting.h/c` | B 김성진 | L1~L6 |
 | `src/doors.h/c` | D 김의현 | D1~D3 (잠금) |

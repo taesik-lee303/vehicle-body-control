@@ -1,0 +1,12 @@
+# C4 차량 상태 수신 중단 → 조명·와이퍼는 시동이 꺼진 것으로 봄
+# 기대: 기어 송신을 1.0초에 끊으면 1.45초 정상, 1.5초 수신 중단, 재개하면 즉시 복귀
+ign on
+gear D
+wait 1
+cut gear                # 마지막 기어 수신 1.000초
+wait 0.45
+expect rxlost off       # 1.450초: 0.45초 경과
+wait 0.05
+expect rxlost on        # 1.500초: 0.5초 경과 → 수신 중단
+resume gear
+expect rxlost off       # 다시 들어오면 바로 복귀
