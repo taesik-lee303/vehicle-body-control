@@ -8,6 +8,8 @@
  * 값이 그대로여도 계속 보내야 하므로, 시간이 흐르는 동안 CONSOLE_TICK_MS마다 패널 값을 다시 보낸다.
  * 시간은 wait 명령(또는 console_advance)으로만 흐른다 → 결과가 매번 같아 경계 시각을 증명할 수 있다.
  *
+ * 주행 모델(drive.h)을 켜면(drive on) 속도·기어·시동은 운전 조작(pedal, gear, ign)으로 만들어진다.
+ *
  * 터미널 대신 다른 화면(그래픽 시뮬레이션 등)을 붙일 때도 이 모듈을 그대로 쓰고,
  * 화면 쪽에서 console_exec()에 명령을 넘기거나 console_advance()로 시간을 진행하면 된다.
  */
@@ -17,6 +19,7 @@
 
 #include <stdio.h>
 
+#include "drive.h"
 #include "vbc.h"
 
 #define CONSOLE_TICK_MS 50u /* 주기 입력 송신 간격. 0.5초보다 짧아야 한다 */
@@ -45,6 +48,8 @@ typedef struct {
 typedef struct {
     VbcSystem sys;
     Panel panel;
+    Drive drive;         /* 주행 모델 (R1~R5) */
+    bool drive_on;       /* true면 속도·기어·시동을 drive가 만든다 */
     vbc_ms_t now;
     FILE *out;           /* 결과를 쓸 곳. NULL이면 아무것도 쓰지 않는다 (테스트용) */
     int expect_failures; /* expect 불일치 횟수 */
