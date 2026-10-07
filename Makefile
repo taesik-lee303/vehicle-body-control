@@ -2,7 +2,7 @@
 # make test   → tests/test_*.c 를 각각 빌드해서 실행 (파일을 추가하면 자동 포함)
 # make scenarios → scenarios/*.txt 를 차례로 실행 (expect 확인)
 # make wasm      → sim/build/vbc.js (emcc 필요: source ~/emsdk/emsdk_env.sh)
-# make sim       → wasm 빌드 후 http://localhost:8000 에서 시뮬레이터 실행
+# make sim       → wasm 빌드 후 http://localhost:8080/sim/ (저장소 루트 서빙, SIM_PORT로 변경)
 # make clean
 
 CC ?= gcc
@@ -56,9 +56,11 @@ $(SIM_OUT): $(LIB_SRCS) $(HEADERS)
 	mkdir -p sim/build
 	$(EMCC) $(CPPFLAGS) -std=c11 $(EMFLAGS) -o $@ $(LIB_SRCS)
 
+SIM_PORT ?= 8080
+
 sim: wasm
-	@echo "브라우저에서 http://localhost:8000 (종료: Ctrl+C)"
-	python3 -m http.server 8000 --directory sim
+	@echo "브라우저에서 http://localhost:$(SIM_PORT)/sim/ (종료: Ctrl+C)"
+	python3 -m http.server $(SIM_PORT)
 
 $(BUILD):
 	mkdir -p $@

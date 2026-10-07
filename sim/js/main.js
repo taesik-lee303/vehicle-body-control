@@ -1,17 +1,12 @@
-// app.js - M1: C 코어(WASM)와 키보드 연결. 3D 화면은 M2에서 추가.
+// main.js - M1: C 코어와 키보드 연결. 3D 화면·툴박스는 M2에서 추가 (docs/sim-plan.md).
 // 화면은 판단하지 않는다: 명령을 보내고 sim_state() JSON을 그린다.
-import createVbc from './build/vbc.js';
+import { createCore } from './core-wasm.js';
 
 const logEl = document.getElementById('log');
 const log = (s) => { logEl.textContent += s + '\n'; logEl.scrollTop = logEl.scrollHeight; };
 
-const vbc = await createVbc({ print: log, printErr: log });
-const api = {
-  init: vbc.cwrap('sim_init', null, ['number']),
-  exec: vbc.cwrap('sim_exec', 'number', ['string']),
-  advance: vbc.cwrap('sim_advance', null, ['number']),
-  state: () => JSON.parse(vbc.UTF8ToString(vbc._sim_state())),
-};
+const api = await createCore();
+api.onLog(log);
 
 function exec(cmd) {
   log('> ' + cmd);
@@ -31,7 +26,7 @@ let paused = false, rate = 1;
 const RATES = [0.25, 0.5, 1, 2];
 
 function updatePedal() {
-  const throttle = keys.has('ArrowUp') ? (keys.has('Shift') ? 2 : 1) : 0;
+  const throttle = keys.has('Shift') ? 2 : keys.has('ArrowUp') ? 1 : 0;   // Shift 단독도 풀 스로틀
   const brake = keys.has('ArrowDown') ? 1 : 0;
   const p = `pedal ${throttle} ${brake}`;
   if (p !== lastPedal) { api.exec(p); lastPedal = p; }   // 페달은 로그에 남기지 않음 (자주 바뀜)
@@ -51,6 +46,7 @@ addEventListener('keydown', (e) => {
     const i = Number(k) - 1;
     exec(`door ${DOORS[i]} ${s.in.doors[i] ? 'close' : 'open'}`);
   } else if (k === ' ') { paused = !paused; log(paused ? '일시정지' : '재개'); }
+  else if (k === '.' && paused) api.advance(50);                     // 일시정지 중 한 틱
   else if (k === '[' || k === ']') {
     rate = RATES[Math.max(0, Math.min(3, RATES.indexOf(rate) + (k === ']' ? 1 : -1)))];
     log(`배속 ${rate}×`);

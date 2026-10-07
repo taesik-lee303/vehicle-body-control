@@ -1,7 +1,7 @@
 # 시연용 시뮬레이션 구현 계획 (F 입력/시연)
 
 담당: 이태식 (F)   검증: C (이지윤)   브랜치: `feature/sim` (PR #6 `feature/input`이 develop에 머지된 뒤 develop에서 분기)
-상태: 초안 v2, 2026-10-07. 팀 검토 전. 12절의 결정 사항을 정한 뒤 M0부터 시작한다.
+상태: 초안 v2, 2026-10-07. M0·M1 완료(PR #7). 팀 검토 전. 12절의 결정 사항을 정한 뒤 M0부터 시작한다.
 
 ## 0. 요약
 
@@ -37,7 +37,7 @@
 
 | 항목 | 1안 WebAssembly | 2안 네이티브 프로세스 + WebSocket |
 |---|---|---|
-| 방법 | `emcc`로 `src/*.c` + `sim/core/sim_api.c`를 `vbc.js`(wasm 내장) 하나로 컴파일. 브라우저가 직접 호출 | `make`로 `build/vbc-json`(stdin 명령 → stdout JSON) 빌드. `sim/bridge/bridge.py`(python `websockets`)가 브라우저와 프로세스를 잇는다 |
+| 방법 | `emcc`로 `src/*.c`(`sim_api.c` 포함)를 `vbc.js`(wasm 내장) 하나로 컴파일. 브라우저가 직접 호출 | `make`로 `build/vbc-json`(stdin 명령 → stdout JSON) 빌드. `sim/bridge/bridge.py`(python `websockets`)가 브라우저와 프로세스를 잇는다 |
 | 설치 | WSL에 emcc 없음(확인함). `sudo apt install emscripten`(3.1.6, nodejs 18 포함 수백 MB) 또는 emsdk 최신(약 1.5GB) | 추가 설치 `pip install websockets`뿐. gcc 13.3, python 3.12 이미 있음 |
 | 시연 | 서버 없이 `index.html` 열면 끝(단, 모듈 로딩 때문에 `python3 -m http.server` 권장) | WSL에서 프로세스 2개를 띄워 둬야 함 |
 | 개발 | C 쪽 printf 디버깅은 브라우저 콘솔로 | `gdb`, 터미널 그대로. C를 고치면 `make`만 |
@@ -59,7 +59,7 @@
 └───────────────┬────────────────────────────────────────────────────┘
                 │ core-wasm.js (1안)  또는  core-ws.js ⇄ bridge.py ⇄ vbc-json (2안)
                 ▼
-      sim/core/sim_api.c ── sim_init() / sim_exec(line) / sim_advance(ms) / sim_state()
+      src/sim_api.c ── sim_init() / sim_exec(line) / sim_advance(ms) / sim_state()
                 │
       src/console.c ── 명령 해석, 패널 값 50ms마다 재송신(사양서 3.1), 변화 출력
                 │
@@ -85,7 +85,7 @@
 |---|---|
 | `src/drive.h/c` | 주행 모델 R1~R5. 입력: 스로틀 단계(0/1/2), 브레이크(0/1), 기어 요청, 시동 요청. 출력: 속력 km/h(float). 순수 C, 시간은 인자로 받음 |
 | `src/console.c/.h` (수정) | `drive on\|off`, `pedal <스로틀> <브레이크>` 명령. `drive on`이면 매 tick `drive_tick()` 결과를 `panel.speed`에 넣고, `ign`/`gear`는 drive 규칙(R1·R2)을 통과해야 반영. `expect speed <n>`, `expect gear p\|r\|n\|d` 항목 추가 |
-| `sim/core/sim_api.c` | 1안·2안 공용. `sim_init`, `sim_exec(const char*)`, `sim_advance(ms)`, `const char *sim_state(void)`. 전역 `Console` 하나 |
+| `src/sim_api.h/c` | 1안·2안 공용. `sim_init`, `sim_exec(const char*)`, `sim_advance(ms)`, `const char *sim_state(void)`. 전역 `Console` 하나. src에 두어 gcc로도 빌드되고 `tests/test_sim_api.c`가 JSON·시간 누적을 검증 |
 | `sim/core/stdio_main.c` | 2안용 main. stdin 한 줄 = 명령(`advance 50`, `state`는 특수 처리) → stdout JSON/로그 |
 | `sim/bridge/bridge.py` | 2안용. WebSocket(8765) ⇄ 프로세스 stdin/stdout 중계. 60줄 안팎 |
 | `sim/index.html`, `sim/css/style.css` | 레이아웃: 전체 화면 3D 캔버스, 좌상단 툴박스, 하단 계기판, 우측 이벤트 로그, 도움말 오버레이. importmap으로 `three` 지정 |
@@ -231,8 +231,8 @@
 
 | 단계 | 내용 | 완료 기준 | 기간 |
 |---|---|---|---|
-| M0 주행 모델 | `drive.c`, 콘솔 `drive`/`pedal`/`expect speed` 명령, `test_drive.c`, R 시나리오 5개, `docs/console.md` 갱신 | `make test` 통과, `make scenarios`에서 R 시나리오 PASS. 그래픽 없음 | 0.5일 |
-| M1 코어 연결 | `sim_api.c`. 1안: `apt install emscripten` → `make wasm`. 안 되면 2안: `stdio_main.c` + `bridge.py`. 숫자만 있는 임시 페이지 | 브라우저에서 ↑를 누르면 속도 숫자가 오르고, 툴박스 없이 콘솔 입력창으로 `lux 300` 넣고 3초 뒤 로그에 "전조등: 꺼짐 → 켜짐"(조명 모듈 머지 후) | 1일 |
+| M0 주행 모델 ✅ | `drive.c`, 콘솔 `drive`/`pedal`/`expect speed` 명령, `test_drive.c`, R 시나리오 5개, `docs/console.md` 갱신 | `make test` 통과, `make scenarios`에서 R 시나리오 PASS. 그래픽 없음 | 0.5일 |
+| M1 코어 연결 ✅ (1안, emsdk 6.0.11) | `sim_api.c`. 1안: `apt install emscripten` → `make wasm`. 안 되면 2안: `stdio_main.c` + `bridge.py`. 숫자만 있는 임시 페이지 | 브라우저에서 ↑를 누르면 속도 숫자가 오르고, 툴박스 없이 콘솔 입력창으로 `lux 300` 넣고 3초 뒤 로그에 "전조등: 꺼짐 → 켜짐"(조명 모듈 머지 후) | 1일 |
 | M2 장면·툴박스 | 박스 차·도로·추적 카메라, 툴박스 전부, 계기판, 이벤트 로그, 일시정지·한 틱·배속, 리셋 | 툴박스 조작 결과가 터미널(`make run`)과 같은 시각에 같은 로그. `L2_dark_turns_on` 재생 시 2.900s ✔ / 3.000s ✔ | 1일 |
 | M3 현실감 | glTF 차, HDRI·`Sky`·조도 연동, 비·안개·젖은 노면, 전조등·블룸, 와이퍼·도어 애니, 카메라 3종, 화질 단계 | 밤 + 비 + 와이퍼 + 전조등이 한 화면에 보임. 표준 화질 내장 GPU 30fps 이상 | 1~2일 |
 | M4 시연 준비 | 시나리오 재생 다듬기, 도움말, 효과음, 발표 대본(어떤 툴박스로 어떤 요구사항을 보일지), 리허설, `docs/verification.md`에 R 행 추가 | 발표 대본대로 10분 리허설 완주. `sim/` 폴더를 다른 노트북에 복사해 열림 | 0.5일 |
@@ -252,8 +252,8 @@ sim/tools/fetch-vendor.sh        # jsdelivr에서 three.module.js + addons → s
 # 1안 WASM
 sudo apt install emscripten      # 또는 emsdk: git clone https://github.com/emscripten-core/emsdk ~/emsdk && ~/emsdk/emsdk install latest && ~/emsdk/emsdk activate latest
 make wasm                        # sim/build/vbc.js (wasm 내장, -sSINGLE_FILE -sMODULARIZE -sEXPORT_ES6)
-make sim                         # python3 -m http.server 8000 (저장소 루트에서. scenarios/ 도 같이 서빙)
-# Windows 브라우저에서 http://localhost:8000/sim/   (WSL2 localhost 포워딩)
+make sim                         # python3 -m http.server 8080 (저장소 루트에서. scenarios/ 도 같이 서빙. 포트는 SIM_PORT=...)
+# Windows 브라우저에서 http://localhost:8080/sim/   (WSL2 localhost 포워딩)
 
 # 2안 네이티브 + WebSocket
 pip install websockets
