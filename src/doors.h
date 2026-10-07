@@ -13,16 +13,12 @@
 
 #include "common.h"
 
-/* 잠금 상태가 바뀐 주기에만 NONE이 아니다 (도어 잠금 구동부로 보낼 명령) */
-typedef enum { DOOR_CMD_NONE, DOOR_CMD_LOCK, DOOR_CMD_UNLOCK } DoorCmd;
-
 typedef struct {
     bool locked; /* 직전 잠금 상태 */
-    DoorCmd cmd; /* 이번 주기에 낸 명령 */
 } DoorState;
 
 void doors_init(DoorState *st);
-/* out->door_locked 를 정하고, 바뀌었으면 st->cmd 에 명령을 둔다 */
+/* out->door_locked 를 정한다 */
 void doors_step(DoorState *st, const VbcContext *ctx, VbcOutputs *out);
 
 #endif /* DOORS_H */

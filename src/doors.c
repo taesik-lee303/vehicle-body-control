@@ -10,13 +10,10 @@
 void doors_init(DoorState *st)
 {
     st->locked = false; /* C5 초기 상태 */
-    st->cmd = DOOR_CMD_NONE;
 }
 
 void doors_step(DoorState *st, const VbcContext *ctx, VbcOutputs *out)
 {
-    bool was_locked = st->locked;
-
     if (ctx->rx_lost) {
         /* D1: 수신 중단 → 잠금 상태 그대로 (C4로 시동이 꺼진 것으로 보이므로 D2보다 먼저) */
     } else if (!ctx->ignition_on || ctx->gear == GEAR_P) {
@@ -25,10 +22,5 @@ void doors_step(DoorState *st, const VbcContext *ctx, VbcOutputs *out)
         st->locked = true; /* D3 */
     }
     /* 해당 없으면 직전 유지 */
-
-    if (st->locked == was_locked)
-        st->cmd = DOOR_CMD_NONE;
-    else
-        st->cmd = st->locked ? DOOR_CMD_LOCK : DOOR_CMD_UNLOCK;
     out->door_locked = st->locked;
 }
