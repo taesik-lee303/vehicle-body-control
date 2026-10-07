@@ -3,6 +3,8 @@
 # make scenarios → scenarios/*.txt 를 차례로 실행 (expect 확인)
 # make wasm      → sim/build/vbc.js (emcc 필요: source ~/emsdk/emsdk_env.sh)
 # make sim       → wasm 빌드 후 http://localhost:8080/sim/ (저장소 루트 서빙, SIM_PORT로 변경)
+# make consoles  → 모듈별 대화형 테스트 콘솔 4개 빌드 (build/con_doors 등)
+# make con-doors / con-dashboard / con-lighting / con-wipers → 해당 콘솔 실행
 # make clean
 
 CC ?= gcc
@@ -16,7 +18,7 @@ HEADERS := $(wildcard src/*.h)
 TEST_SRCS := $(wildcard tests/test_*.c)
 TEST_BINS := $(TEST_SRCS:tests/%.c=$(BUILD)/%)
 
-.PHONY: all test run scenarios wasm sim clean
+.PHONY: all test run scenarios wasm sim consoles clean
 
 all: $(BUILD)/vbc
 
@@ -61,6 +63,21 @@ SIM_PORT ?= 8080
 sim: wasm
 	@echo "브라우저에서 http://localhost:$(SIM_PORT)/sim/ (종료: Ctrl+C)"
 	python3 -m http.server $(SIM_PORT)
+
+# ---- 모듈별 대화형 테스트 콘솔 (tools/consoles) ----
+CON_SRCS := $(wildcard tools/consoles/con_*.c)
+CON_BINS := $(CON_SRCS:tools/consoles/%.c=$(BUILD)/%)
+
+consoles: $(CON_BINS)
+
+$(BUILD)/modcon.o: tools/consoles/modcon.c tools/consoles/modcon.h $(HEADERS) | $(BUILD)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
+
+$(BUILD)/con_%: tools/consoles/con_%.c $(BUILD)/modcon.o $(LIB_OBJS) tools/consoles/modcon.h | $(BUILD)
+	$(CC) $(CPPFLAGS) -Itools/consoles $(CFLAGS) -o $@ $< $(BUILD)/modcon.o $(LIB_OBJS)
+
+con-%: $(BUILD)/con_%
+	./$<
 
 $(BUILD):
 	mkdir -p $@

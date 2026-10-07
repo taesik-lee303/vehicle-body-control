@@ -96,6 +96,12 @@ make scenarios   # scenarios/*.txt 전체 (PASS/FAIL)
 make run         # 터미널에서 명령으로 조작 (help 로 명령 목록)
 ```
 
+## 모듈별 테스트 콘솔 (emsdk 불필요)
+도어·계기판·조명·와이퍼를 하나씩 따로 실행해, 입력을 바꿔 가며 그 모듈의 출력만 확인합니다. 사용법: `tools/consoles/README.md`
+```bash
+make con-doors   # 또는 con-dashboard, con-lighting, con-wipers
+```
+
 ## 문제 해결
 | 증상 | 확인 |
 |---|---|
