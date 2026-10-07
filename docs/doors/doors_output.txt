@@ -1,0 +1,5 @@
+# 도어 잠금 모듈(doors_step) 출력 — VbcOutputs *out 에 쓰는 변수
+# 변수명 | 타입 | 기능
+
+out->door_locked  | bool    | 도어 잠금 명령. true = 잠금, false = 해제. 도어 잠금 구동부로 전달
+                              초기값은 false(해제, C5)

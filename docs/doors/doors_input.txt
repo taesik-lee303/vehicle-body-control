@@ -1,0 +1,11 @@
+# 도어 잠금 모듈(doors_step) 입력 — const VbcContext *ctx 에서 읽는 변수
+# 변수명 | 타입 | 기능
+
+ctx->rx_lost      | bool    | 속도·기어·시동 중 하나라도 0.5초 동안 안 들어옴(C4). true이면 D1 적용, 잠금 상태 유지
+ctx->ignition_on  | bool    | 시동 상태. false이면 D2 적용, 해제 (수신 중단이면 이미 false)
+ctx->gear         | Gear    | 기어(GEAR_P, GEAR_R, GEAR_N, GEAR_D). GEAR_P이면 D2 적용, 해제
+ctx->speed_valid  | bool    | 속도가 유효한가(C3). true일 때만 speed_kmh 사용
+ctx->speed_kmh    | int32_t | 차속(km/h). speed_valid가 true이고 15 이상이면 D3 적용, 잠금
+
+# 모듈 내부 상태 (DoorState *st)
+st->locked        | bool    | 직전 잠금 상태. 어느 조건에도 해당하지 않으면 이 값을 유지
