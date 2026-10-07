@@ -12,6 +12,8 @@
 #include <string.h>
 #include <strings.h>
 #include <unistd.h>
+#include <errno.h>
+#include <limits.h>
 
 enum { CUT_SPEED = 1, CUT_GEAR = 2, CUT_IGN = 4, CUT_LUX = 8, CUT_RAIN = 16,
        CUT_VEHICLE = CUT_SPEED | CUT_GEAR | CUT_IGN, CUT_ALL = 31 };
@@ -19,6 +21,18 @@ enum { CUT_SPEED = 1, CUT_GEAR = 2, CUT_IGN = 4, CUT_LUX = 8, CUT_RAIN = 16,
 static const char *const LIGHT_SW_NAMES[] = {"OFF", "AUTO", "ON"};
 static const char *const WIPER_SW_NAMES[] = {"OFF", "AUTO", "LOW", "HIGH"};
 static const char *const GEAR_NAMES[] = {"P", "R", "N", "D"};
+
+/* 정해진 값 밖이면 "정의 안 됨(7)"처럼 */
+static const char *sw_name(const char *const *names, int n, int v)
+{
+    static char buf[2][32];
+    static int k;
+    if (v >= 0 && v < n)
+        return names[v];
+    k ^= 1;
+    snprintf(buf[k], sizeof buf[k], "정의 안 됨(%d)", v);
+    return buf[k];
+}
 
 /* ---- 입력 읽기 ---- */
 
@@ -52,7 +66,7 @@ static char *trim(char *s)
     return s;
 }
 
-/* 정수 하나. 범위 밖 값도 받는다 (고장·무효 시험). 빈 입력이면 취소 */
+/* 정수 하나. 사양서 범위 밖 값도 받는다 (고장·무효 시험). 모듈 인터페이스가 int32라 그 범위까지. 빈 입력이면 취소 */
 static bool ask_int(const char *prompt, int32_t *out)
 {
     char buf[64];
@@ -63,9 +77,14 @@ static bool ask_int(const char *prompt, int32_t *out)
     char *s = trim(buf);
     if (!*s)
         return false;
-    long v = strtol(s, &end, 10);
-    if (*end || v < -1000000 || v > 1000000) {
-        printf("  ! 숫자를 입력하세요\n");
+    errno = 0;
+    long long v = strtoll(s, &end, 10);
+    if (*end) {
+        printf("  ! 정수를 입력하세요 (소수·글자는 모듈 입력 형식(int32)이 아니라 넘길 수 없습니다)\n");
+        return false;
+    }
+    if (errno == ERANGE || v < INT32_MIN || v > INT32_MAX) {
+        printf("  ! int32 범위(%ld ~ %ld) 밖이라 넘길 수 없습니다\n", (long)INT32_MIN, (long)INT32_MAX);
         return false;
     }
     *out = (int32_t)v;
@@ -229,7 +248,8 @@ typedef struct { unsigned in; } Item;
 static int build_items(const ModCon *m, Item *items)
 {
     static const unsigned order[] = {IN_IGN, IN_GEAR, IN_SPEED, IN_LUX, IN_RAIN, IN_DOORS, IN_LIGHT_SW,
-                                     IN_WIPER_SW, IN_WIPER_LEVEL, IN_CUT_VEHICLE, IN_CUT_LUX, IN_CUT_RAIN};
+                                     IN_WIPER_SW, IN_WIPER_SW_CODE, IN_LIGHT_SW_CODE, IN_WIPER_LEVEL,
+                                     IN_CUT_VEHICLE, IN_CUT_LUX, IN_CUT_RAIN};
     int n = 0;
 
     for (size_t i = 0; i < sizeof order / sizeof order[0]; i++)
@@ -257,8 +277,10 @@ static void print_menu(const ModCon *m, const Item *items, int n)
                    m->in.door_open[1] ? "열림" : "닫힘", m->in.door_open[2] ? "열림" : "닫힘",
                    m->in.door_open[3] ? "열림" : "닫힘");
             break;
-        case IN_LIGHT_SW: printf("조명 스위치 [%s]", LIGHT_SW_NAMES[m->in.light_sw]); break;
-        case IN_WIPER_SW: printf("와이퍼 스위치 [%s]", WIPER_SW_NAMES[m->in.wiper_sw]); break;
+        case IN_LIGHT_SW: printf("조명 스위치 [%s]", sw_name(LIGHT_SW_NAMES, 3, (int)m->in.light_sw)); break;
+        case IN_WIPER_SW: printf("와이퍼 스위치 [%s]", sw_name(WIPER_SW_NAMES, 4, (int)m->in.wiper_sw)); break;
+        case IN_LIGHT_SW_CODE: printf("조명 스위치를 코드로 직접 (0 OFF, 1 AUTO, 2 ON, 그 밖의 값도 그대로)"); break;
+        case IN_WIPER_SW_CODE: printf("와이퍼 스위치를 코드로 직접 (0 OFF, 1 AUTO, 2 LOW, 3 HIGH, 그 밖의 값도 그대로)"); break;
         case IN_WIPER_LEVEL: printf("와이퍼 단계(조명에 넘길 값) [%s]", vbc_wiper_name(m->wiper_level)); break;
         case IN_CUT_VEHICLE: printf("속도·기어·시동 송신 [%s] (누르면 끊기/잇기, C4)", cut_label(m, CUT_VEHICLE)); break;
         case IN_CUT_LUX: printf("조도 송신 [%s] (누르면 끊기/잇기, C2)", cut_label(m, CUT_LUX)); break;
@@ -311,6 +333,12 @@ static void edit(ModCon *m, unsigned what)
         break;
     case IN_WIPER_SW:
         if ((c = ask_choice("  와이퍼 스위치", WIPER_SW_NAMES, 4)) >= 0) { vbc_set_wiper_switch(&m->in, (WiperSwitch)c); apply(m, 0); }
+        break;
+    case IN_LIGHT_SW_CODE:
+        if (ask_int("  조명 스위치 코드 (정수, 예: 7, -1)> ", &v)) { vbc_set_light_switch(&m->in, (LightSwitch)v); apply(m, 0); }
+        break;
+    case IN_WIPER_SW_CODE:
+        if (ask_int("  와이퍼 스위치 코드 (정수, 예: 7, -1)> ", &v)) { vbc_set_wiper_switch(&m->in, (WiperSwitch)v); apply(m, 0); }
         break;
     case IN_WIPER_LEVEL:
         if ((c = ask_choice("  와이퍼 단계", WIPER_LEVEL_NAMES, 4)) >= 0) { m->wiper_level = (WiperLevel)c; apply(m, 0); }

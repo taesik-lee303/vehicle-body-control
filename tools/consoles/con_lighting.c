@@ -18,7 +18,7 @@ int main(void)
         .about = "우선순위 L1 시동 OFF 소등 > L5 조도 고장 점등·표시 > L4 스위치 ON/OFF > L6 와이퍼 10초 작동 > "
                  "L2 1000 lux 미만 1초 점등 · L3 1500 lux 초과 3초 소등(그 사이는 직전 유지). "
                  "예) 시동 ON, 스위치 AUTO, 조도 300, t 0.95 → t 0.05",
-        .inputs = IN_IGN | IN_LIGHT_SW | IN_LUX | IN_WIPER_LEVEL | IN_CUT_LUX | IN_CUT_VEHICLE,
+        .inputs = IN_IGN | IN_LIGHT_SW | IN_LIGHT_SW_CODE | IN_LUX | IN_WIPER_LEVEL | IN_CUT_LUX | IN_CUT_VEHICLE,
         .outputs = OUT_HEADLIGHT | OUT_LUX_LAMP,
         .mod_init = mod_init,
         .mod_step = mod_step,
