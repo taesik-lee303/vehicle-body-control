@@ -99,8 +99,24 @@ const toolbox = setupToolbox({
     stop: () => scenario.stop(),
   },
 });
-const world = createWorld(document.getElementById('view'));
+// URL로 화질·차 모델 지정: ?q=low|std|high&car=code|glb (기본: 저장된 화질, car.glb가 있으면 그것)
+const params = new URLSearchParams(location.search);
+let savedQuality = null;
+try { savedQuality = localStorage.getItem('vbc.quality'); } catch { /* 저장소를 못 쓰면 기본값 */ }
+const world = createWorld(document.getElementById('view'), {
+  log, quality: params.get('q') || savedQuality || 'std', carModel: params.get('car') || 'auto' });
 const hudEl = document.getElementById('hud');
+
+// 화질: 기본(그림자·블룸 없음) / 표준 / 높음. 고른 값은 이 브라우저에 기억
+const qualityBtns = [...document.querySelectorAll('#quality [data-q]')];
+function showQuality() { qualityBtns.forEach((b) => b.classList.toggle('active', b.dataset.q === world.quality())); }
+qualityBtns.forEach((b) => b.addEventListener('click', () => {
+  log(`화질: ${world.setQuality(b.dataset.q)}`, 'info');
+  try { localStorage.setItem('vbc.quality', b.dataset.q); } catch { /* 저장 못 해도 이번 실행에는 적용됨 */ }
+  showQuality();
+  b.blur();
+}));
+showQuality();
 
 core.init(false);
 sendQuiet('drive on');
@@ -109,7 +125,6 @@ loading.remove();
 log('준비됨. I 시동 → D 기어 → ↑ 가속. H 도움말', 'info');
 
 // URL로 시작 장면 지정 (발표용·확인용): ?cmd=lux 300&cmd=rain 70&wait=3&scenario=R5_top_speed.txt&cam=1
-const params = new URLSearchParams(location.search);
 for (const c of params.getAll('cmd')) exec(c);
 if (params.has('wait')) core.advance(Math.round(Number(params.get('wait')) * 1000));
 for (let i = 0; i < Number(params.get('cam') || 0); i++) actions.nextCamera();

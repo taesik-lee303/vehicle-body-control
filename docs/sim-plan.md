@@ -93,9 +93,9 @@
 | `sim/js/core-wasm.js`, `sim/js/core-ws.js` | 전송 계층. 같은 인터페이스 `{init, exec, advance, state, onLog}` |
 | `sim/js/input.js` | 키보드 → 명령. 키가 바뀔 때만 `pedal` 전송, 창 포커스 잃으면 `pedal 0 0` |
 | `sim/js/toolbox.js`, `sim/js/hud.js`, `sim/js/scenario.js` | 툴박스, 계기판, 시나리오 재생 |
-| `sim/js/scene/world.js, car.js, weather.js, lights.js, camera.js` | 도로·하늘·환경광, 차와 부품 애니메이션, 비·안개·젖은 노면, 전조등·블룸, 카메라 3종 |
-| `sim/vendor/three/` | three.module.js + addons(GLTFLoader, Sky, EffectComposer, UnrealBloomPass, Reflector) 로컬 복사. 발표장 인터넷 불필요 |
-| `sim/assets/` | 차 glTF, HDRI 2장(낮·밤), 노면 텍스처. 출처·라이선스는 `sim/assets/LICENSES.md` |
+| `sim/js/scene/world.js, sky.js, road.js, car.js, car-gltf.js, loft.js` | 장면 조립·비·카메라 4종·블룸·화질 / HDRI 하늘과 반사 환경 / 노면·차선·가드레일·가로등·나무 / 코드로 만든 곡면 차 / car.glb 어댑터 / 곡면 생성 |
+| `sim/vendor/three/` | three.module.js + addons(GLTFLoader, DRACOLoader, RGBELoader, EffectComposer, UnrealBloomPass, OutputPass, RoundedBoxGeometry) 로컬 복사 (`sim/tools/fetch-vendor.sh`). 발표장 인터넷 불필요 |
+| `sim/assets/` | HDRI 3장(낮·흐림·밤), 노면·풀밭 텍스처 (Poly Haven CC0, `sim/tools/fetch-assets.sh`). 선택: `car.glb`. 출처·라이선스·노드 이름 규칙은 `sim/assets/README.md` |
 | `tests/test_drive.c`, `scenarios/R1_*.txt … R5_*.txt` | R1~R5 증명 |
 | `Makefile` | `make wasm`(emcc), `make sim`(정적 서버), `make bridge`(2안). `make test`는 emcc 없이 그대로 |
 
@@ -234,7 +234,7 @@
 | M0 주행 모델 ✅ | `drive.c`, 콘솔 `drive`/`pedal`/`expect speed` 명령, `test_drive.c`, R 시나리오 5개, `docs/console.md` 갱신 | `make test` 통과, `make scenarios`에서 R 시나리오 PASS. 그래픽 없음 | 0.5일 |
 | M1 코어 연결 ✅ (1안, emsdk 6.0.11) | `sim_api.c`. 1안: `apt install emscripten` → `make wasm`. 안 되면 2안: `stdio_main.c` + `bridge.py`. 숫자만 있는 임시 페이지 | 브라우저에서 ↑를 누르면 속도 숫자가 오르고, 툴박스 없이 콘솔 입력창으로 `lux 300` 넣고 3초 뒤 로그에 "전조등: 꺼짐 → 켜짐"(조명 모듈 머지 후) | 1일 |
 | M2 장면·툴박스 ✅ | 박스 차·도로·추적 카메라, 툴박스 전부, 계기판, 이벤트 로그, 일시정지·한 틱·배속, 리셋 | 툴박스 조작 결과가 터미널(`make run`)과 같은 시각에 같은 로그. `L2_dark_turns_on` 재생 시 2.900s ✔ / 3.000s ✔ | 1일 |
-| M3 현실감 | glTF 차, HDRI·`Sky`·조도 연동, 비·안개·젖은 노면, 전조등·블룸, 와이퍼·도어 애니, 카메라 3종, 화질 단계 | 밤 + 비 + 와이퍼 + 전조등이 한 화면에 보임. 표준 화질 내장 GPU 30fps 이상 | 1~2일 |
+| M3 현실감 ✅ (일부) | 코드로 만든 곡면 차 + `car.glb` 어댑터, HDRI 3장 조도·강우 연동, 비·안개·젖은 노면, 전조등·블룸, 와이퍼·도어 애니, 카메라 4종, 화질 3단계. 미구현: 노면 반사(`Reflector`), 유리 물방울, 실내 카메라 | 밤 + 비 + 와이퍼 + 전조등이 한 화면에 보임. 1600×900 밤·비·주행에서 표준 44fps (개발 PC, 헤드리스 측정) | 1~2일 |
 | M4 시연 준비 | 시나리오 재생 다듬기, 도움말, 효과음, 발표 대본(어떤 툴박스로 어떤 요구사항을 보일지), 리허설, `docs/verification.md`에 R 행 추가 | 발표 대본대로 10분 리허설 완주. `sim/` 폴더를 다른 노트북에 복사해 열림 | 0.5일 |
 
 B~E 모듈이 아직 임시 구현이어도 M0~M2는 진행된다(출력이 안 바뀔 뿐). 모듈이 머지될 때마다 화면이 살아난다. M3는 B(조명)·C(와이퍼) 머지 후가 보기 좋다.

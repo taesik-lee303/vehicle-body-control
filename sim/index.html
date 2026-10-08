@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>VBC 시뮬레이터</title>
 <link rel="stylesheet" href="css/style.css">
-<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js" } }</script>
+<script type="importmap">{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }</script>
 </head>
 <body>
 <canvas id="view"></canvas>
@@ -74,6 +74,11 @@
     </div>
 
     <div class="group">
+      <div class="label">화질</div>
+      <div class="seg" id="quality"><button data-q="low">기본</button><button data-q="std">표준</button><button data-q="high">높음</button></div>
+    </div>
+
+    <div class="group">
       <div class="label">시나리오</div>
       <div class="row">
         <select id="scenario"><option value="">불러오는 중…</option></select>
@@ -108,7 +113,7 @@
     <tr><td><kbd>1</kbd>~<kbd>4</kbd></td><td>도어 FL FR RL RR 열림/닫힘</td></tr>
     <tr><td><kbd>Space</kbd> / <kbd>.</kbd></td><td>일시정지 / 일시정지 중 한 틱(0.05초)</td></tr>
     <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>배속 0.25 · 0.5 · 1 · 2</td></tr>
-    <tr><td><kbd>C</kbd></td><td>카메라: 추적 → 정면 → 위</td></tr>
+    <tr><td><kbd>C</kbd></td><td>카메라: 추적 → 정면 → 위 → 측면</td></tr>
     <tr><td><kbd>Tab</kbd> / <kbd>H</kbd></td><td>툴박스 접기 / 이 도움말</td></tr>
   </table>
   <p>시간은 시뮬레이션 시각입니다. 일시정지 중에는 시각이 흐르지 않아 수신 중단(C4)도 생기지 않습니다.

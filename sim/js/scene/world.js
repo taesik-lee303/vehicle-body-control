@@ -1,198 +1,199 @@
-// world.js - 도로, 하늘, 조명, 비, 카메라 (M2 기본 화질). 현실감 강화는 M3 (docs/sim-plan.md 7절).
-// 환경(하늘 밝기, 비)은 입력 값(조도, 강우량)을 연속적으로 비출 뿐, 요구사항 수치(1000, 1500 lx 등)로 판단하지 않는다.
+// world.js - 장면 조립: 실사 하늘·도로·차, 비, 카메라, 블룸, 화질 단계 (docs/sim-plan.md 7절).
+// 환경(하늘 밝기, 비)은 입력 값(조도, 강우량)을 연속적으로 비출 뿐, 요구사항 수치로 판단하지 않는다.
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { createCar } from './car.js';
+import { loadGltfCar } from './car-gltf.js';
+import { createSky } from './sky.js';
+import { createRoad } from './road.js';
 
 const LUX_MAX = 60000;
-const ROAD_LEN = 400;          // 도로 조각들이 이 길이 안에서 돌아가며 흐른다
-const LANE_X = 1.9;            // 차가 달리는 차선 중심
 const LANE_SWAY = 1.0;         // ←→로 움직일 수 있는 폭
-const MAX_DROPS = 4000;
+const MAX_DROPS = 6000;
+const MOON = new THREE.Color(0.62, 0.72, 1.0);
 
-const SKY_NIGHT = new THREE.Color(0x03050b);
-const SKY_DAY = new THREE.Color(0x8cb6e4);
-const SKY_RAIN = new THREE.Color(0x56606b);
+export const QUALITY = {
+  low: { label: '기본', ratio: 1, shadows: false, bloom: false, drops: 1600 },
+  std: { label: '표준', ratio: 1.5, shadows: true, bloom: true, drops: 3500 },
+  high: { label: '높음', ratio: 2, shadows: true, bloom: true, drops: 6000 },
+};
 
-export function createWorld(canvas) {
-  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
-  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const smooth = (a, b, x) => { const t = THREE.MathUtils.clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+
+export function createWorld(canvas, { log = () => {}, quality = 'std', carModel = 'auto' } = {}) {
+  const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: 'high-performance' });
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 
   const scene = new THREE.Scene();
-  scene.background = SKY_DAY.clone();
-  scene.fog = new THREE.Fog(SKY_DAY.clone(), 40, 220);
+  scene.fog = new THREE.Fog(0x9fb4c8, 60, 520);
+  const camera = new THREE.PerspectiveCamera(56, 1, 0.1, 1600);
 
-  const camera = new THREE.PerspectiveCamera(58, 1, 0.1, 600);
+  const sky = createSky(renderer);
+  scene.add(sky.dome);
 
-  const hemi = new THREE.HemisphereLight(0xdfeaff, 0x2a3324, 1);
-  const sun = new THREE.DirectionalLight(0xfff4e0, 2.5);
-  sun.position.set(-30, 50, -20);
+  const sun = new THREE.DirectionalLight(0xfff1dc, 3);
   sun.castShadow = true;
   sun.shadow.mapSize.set(2048, 2048);
-  Object.assign(sun.shadow.camera, { left: -15, right: 15, top: 15, bottom: -15, near: 1, far: 150 });
-  scene.add(hemi, sun, sun.target);
+  sun.shadow.bias = -0.0004;
+  sun.shadow.normalBias = 0.02;
+  Object.assign(sun.shadow.camera, { left: -12, right: 12, top: 12, bottom: -12, near: 1, far: 200 });
+  scene.add(sun, sun.target);
+  const fill = new THREE.HemisphereLight(0xbfd4ff, 0x30352a, 0);   // 하늘 HDRI를 못 불러왔을 때와 밤의 최소 밝기
+  scene.add(fill);
 
-  // ---- 땅, 도로 ----
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(800, 800),
-    new THREE.MeshStandardMaterial({ color: 0x33472b, roughness: 1 }));
-  ground.rotation.x = -Math.PI / 2;
-  ground.receiveShadow = true;
-  scene.add(ground);
-
-  const asphalt = new THREE.MeshStandardMaterial({ color: 0x2a2b2e, roughness: 0.92, metalness: 0 });
-  const road = new THREE.Mesh(new THREE.PlaneGeometry(9, 800), asphalt);
-  road.rotation.x = -Math.PI / 2;
-  road.position.y = 0.01;
-  road.receiveShadow = true;
-  scene.add(road);
-
-  const paintWhite = new THREE.MeshStandardMaterial({ color: 0xe9e9e9, roughness: 0.6 });
-  const paintYellow = new THREE.MeshStandardMaterial({ color: 0xe0b400, roughness: 0.6 });
-  for (const x of [-4.3, 4.3]) {            // 양쪽 실선
-    const edge = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 800), paintWhite);
-    edge.rotation.x = -Math.PI / 2; edge.position.set(x, 0.02, 0); scene.add(edge);
-  }
-
-  // 흐르는 것들: 중앙 점선, 가로등, 나무. 차는 제자리, 세상이 뒤로 흐른다
-  const movers = [];
-  const addMover = (obj, z) => { obj.position.z = z; scene.add(obj); movers.push(obj); };
-  for (let z = -ROAD_LEN / 2; z < ROAD_LEN / 2; z += 9) {
-    const dash = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 4), paintYellow);
-    dash.rotation.x = -Math.PI / 2; dash.position.set(0, 0.02, 0);
-    addMover(dash, z);
-  }
-  const poleMat = new THREE.MeshStandardMaterial({ color: 0x5b6068, metalness: 0.7, roughness: 0.4 });
-  const lampMat = new THREE.MeshStandardMaterial({ color: 0x999999, emissive: 0xffd9a0, emissiveIntensity: 0 });
-  for (let z = -ROAD_LEN / 2; z < ROAD_LEN / 2; z += 40) {
-    const g = new THREE.Group();
-    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 7, 10), poleMat);
-    pole.position.set(5.6, 3.5, 0);
-    const arm = new THREE.Mesh(new THREE.BoxGeometry(1.6, 0.08, 0.08), poleMat);
-    arm.position.set(4.9, 6.95, 0);
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.25), lampMat);
-    head.position.set(4.2, 6.88, 0);
-    g.add(pole, arm, head);
-    g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-    addMover(g, z);
-  }
-  const trunkMat = new THREE.MeshStandardMaterial({ color: 0x4a3524, roughness: 1 });
-  const leafMat = new THREE.MeshStandardMaterial({ color: 0x24461f, roughness: 1 });
-  for (let z = -ROAD_LEN / 2; z < ROAD_LEN / 2; z += 14) {
-    for (const side of [-1, 1]) {
-      const g = new THREE.Group();
-      const x = side * (9 + ((z * 7.3) % 6 + 6) % 6);   // 고정된 의사 난수 배치
-      const h = 3 + ((z * 3.1) % 2 + 2) % 2;
-      const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.2, h * 0.4, 6), trunkMat);
-      trunk.position.set(x, h * 0.2, 0);
-      const crown = new THREE.Mesh(new THREE.ConeGeometry(h * 0.35, h * 0.8, 8), leafMat);
-      crown.position.set(x, h * 0.4 + h * 0.4, 0);
-      g.add(trunk, crown);
-      g.traverse((o) => { if (o.isMesh) o.castShadow = true; });
-      addMover(g, z + side * 5);
-    }
-  }
+  const road = createRoad(scene);
+  const LANE_X = road.laneX;
 
   // ---- 비: 짧은 선분. 강우량에 비례해 그리는 개수만 바꾼다 ----
-  const dropPos = new Float32Array(MAX_DROPS * 6);
+  const dropPos = new Float32Array(MAX_DROPS * 6), dropCol = new Float32Array(MAX_DROPS * 6);
   const dropGeo = new THREE.BufferGeometry();
   dropGeo.setAttribute('position', new THREE.BufferAttribute(dropPos, 3));
-  const rainLines = new THREE.LineSegments(dropGeo,
-    new THREE.LineBasicMaterial({ color: 0xaab8c8, transparent: true, opacity: 0.55 }));
+  dropGeo.setAttribute('color', new THREE.BufferAttribute(dropCol, 3));
+  const rainMat = new THREE.LineBasicMaterial({ vertexColors: true, transparent: true, opacity: 0.55 });
+  const rainLines = new THREE.LineSegments(dropGeo, rainMat);
   rainLines.frustumCulled = false;
   scene.add(rainLines);
   const resetDrop = (i, top) => {
     const x = (Math.random() - 0.5) * 40, z = -Math.random() * 60 + 12, y = top ? 18 + Math.random() * 4 : Math.random() * 22;
-    dropPos.set([x, y, z, x, y - 0.45, z], i * 6);
+    dropPos.set([x, y, z, x - 0.02, y - 0.55, z + 0.06], i * 6);
   };
   for (let i = 0; i < MAX_DROPS; i++) resetDrop(i, false);
 
-  // ---- 차 ----
-  const car = createCar();
-  car.group.position.x = LANE_X;
+  // ---- 차: 코드 모델로 시작하고, sim/assets/car.glb가 있으면 바꿔 끼운다 ----
+  let car = createCar();
   scene.add(car.group);
-  sun.target = car.group;
+  if (carModel !== 'code') {
+    fetch('assets/car.glb', { method: 'HEAD' }).then((r) => {
+      if (!r.ok) { if (carModel === 'glb') log('  ! sim/assets/car.glb가 없습니다. 코드 모델을 씁니다.', 'err'); return; }
+      return loadGltfCar('assets/').then((c) => {
+        scene.remove(car.group);
+        car = c;
+        scene.add(car.group);
+        log(`차 모델: car.glb (${c.info})`, 'info');
+      });
+    }).catch((err) => log(`  ! car.glb를 불러오지 못했습니다: ${err.message}. 코드 모델을 씁니다.`, 'err'));
+  }
+
+  // ---- 후처리: 블룸 (전조등·가로등·브레이크등 번짐) ----
+  const composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  const bloom = new UnrealBloomPass(new THREE.Vector2(256, 256), 0.4, 0.55, 1.0);
+  composer.addPass(bloom);
+  composer.addPass(new OutputPass());
 
   // ---- 카메라 ----
-  const CAMERAS = ['추적', '정면', '위'];
+  const CAMERAS = ['추적', '정면', '위', '측면'];
   let camMode = 0;
   let camSnap = true;   // 카메라를 바꾼 직후에는 부드럽게 옮기지 않고 바로 이동 (차체를 뚫고 지나가지 않게)
   const camPos = new THREE.Vector3(LANE_X, 3.2, 8.5);
   const lookAt = new THREE.Vector3();
-  function placeCamera(dt, carX) {
+  function placeCamera(dt, carX, speedKmh) {
     const want = new THREE.Vector3();
-    if (camMode === 0) { want.set(carX, 2.8, 8.2); lookAt.set(carX, 1.0, -6); }
-    else if (camMode === 1) { want.set(carX + 5.5, 2.4, -6.0); lookAt.set(carX, 0.8, -0.5); }   // 앞 대각선(3/4). 전조등 빛 웅덩이 밖에서 앞유리·전조등이 보이게
-    else { want.set(carX + 0.01, 16, 3); lookAt.set(carX, 0, -2); }
+    if (camMode === 0) { want.set(carX, 2.4, 7.6); lookAt.set(carX, 1.0, -6); }
+    else if (camMode === 1) { want.set(carX + 4.6, 1.7, -6.2); lookAt.set(carX, 0.75, -0.6); }   // 앞 대각선(3/4). 앞유리·전조등이 보이게
+    else if (camMode === 2) { want.set(carX + 0.01, 16, 3); lookAt.set(carX, 0, -2); }
+    else { want.set(carX - 6.2, 1.3, 0.4); lookAt.set(carX, 0.8, 0); }                              // 왼쪽 옆 (도어·바퀴)
     if (camSnap) { camPos.copy(want); camSnap = false; } else camPos.lerp(want, Math.min(1, dt * 4));
     camera.position.copy(camPos);
     camera.lookAt(lookAt);
+    const fov = 56 + Math.min(8, speedKmh * 0.04);   // 빠를수록 조금 넓게
+    if (Math.abs(camera.fov - fov) > 0.05) { camera.fov = fov; camera.updateProjectionMatrix(); }
   }
 
+  // ---- 화질 ----
+  let q = QUALITY[quality] ? quality : 'std';
+  function applyQuality() {
+    const Q = QUALITY[q];
+    renderer.setPixelRatio(Math.min(devicePixelRatio, Q.ratio));
+    sun.castShadow = Q.shadows;
+    resize();
+  }
   function resize() {
     const w = canvas.clientWidth, h = canvas.clientHeight;
     renderer.setSize(w, h, false);
+    composer.setPixelRatio(renderer.getPixelRatio());
+    composer.setSize(w, h);
     camera.aspect = w / h;
     camera.updateProjectionMatrix();
   }
   addEventListener('resize', resize);
-  resize();
+  applyQuality();
 
-  let carX = LANE_X;
+  let carX = LANE_X, clock = 0;
 
   function update(s, dt, lateral) {
+    clock += dt;
     const speedMs = s.in.speed_mkmh / 1000 / 3.6;
     const dir = s.in.gear === 'R' ? -1 : 1;            // 속도는 방향 없는 속력, 후진은 기어 R로 구분
     const dz = speedMs * dt * dir;
-    for (const m of movers) {
-      m.position.z += dz;
-      if (m.position.z > ROAD_LEN / 2) m.position.z -= ROAD_LEN;
-      else if (m.position.z < -ROAD_LEN / 2) m.position.z += ROAD_LEN;
+
+    // 조도 → 낮·밤 (로그 눈금, 연속). 강우량 → 흐림·젖은 노면
+    const lux = THREE.MathUtils.clamp(s.in.lux, 0, LUX_MAX);
+    const day = Math.log10(lux + 1) / Math.log10(LUX_MAX + 1);
+    const light = smooth(0.42, 0.92, day);              // 0 밤 ~ 1 한낮 (연출 곡선)
+    const wet = THREE.MathUtils.clamp(s.in.rain, 0, 100) / 100;
+    const dark = 1 - light;
+
+    const env = sky.set(light, wet, 0.3 + 0.7 * smooth(0, 0.45, day), clock);
+    scene.environment = env;
+    scene.fog.color.copy(sky.fogColor);
+    scene.fog.near = 60 - wet * 50;
+    scene.fog.far = 520 - wet * 400;
+    renderer.toneMappingExposure = 0.62 + 0.25 * dark;
+    // 낮에는 해, 밤에는 약한 달빛 (같은 방향 광원을 색·세기만 바꿔 쓴다)
+    sun.intensity = 3.2 * light ** 1.5 * (1 - wet * 0.85) + 0.18 * dark * (1 - wet * 0.6);
+    sun.color.setRGB(1, 0.95, 0.87).lerp(MOON, dark);
+    fill.intensity = 0.12 * dark + (env ? 0 : 0.8 * light);   // 밤에도 차 윤곽이 보일 정도
+    bloom.strength = 0.15 + 0.35 * dark;
+
+    road.update(dz, dark, wet);
+
+    // 비
+    const Q = QUALITY[q];
+    const count = Math.round(wet * Q.drops);
+    dropGeo.setDrawRange(0, count * 2);
+    const fall = 22 * dt;
+    const base = 0.12 + 0.6 * light, beamOn = !!s.out.headlight;
+    for (let i = 0; i < count; i++) {
+      const o = i * 6;
+      dropPos[o + 1] -= fall; dropPos[o + 4] -= fall;
+      dropPos[o + 2] += dz; dropPos[o + 5] += dz;
+      if (dropPos[o + 4] < 0 || dropPos[o + 2] > 14 || dropPos[o + 2] < -50) resetDrop(i, true);
+      // 전조등 빛 안의 빗방울은 밝게 (빗속 빛줄기)
+      let b = base;
+      const ahead = -dropPos[o + 2] - 2.3;
+      if (beamOn && ahead > 0 && ahead < 45 && Math.abs(dropPos[o]) < 1.1 + ahead * 0.32 && dropPos[o + 1] < 1.0 + ahead * 0.12) {
+        b += 1.6 * (1 - ahead / 45) ** 1.5;
+      }
+      for (let k = 0; k < 6; k += 3) { dropCol[o + k] = b * 0.92; dropCol[o + k + 1] = b * 0.93; dropCol[o + k + 2] = b; }
     }
+    dropGeo.attributes.position.needsUpdate = true;
+    dropGeo.attributes.color.needsUpdate = true;
+    rainLines.position.x = carX;
 
     // 차선 안 좌우 이동 (연출). 움직일 때만 조금씩
     if (speedMs > 0.3) carX = THREE.MathUtils.clamp(carX + lateral * dt * 1.5, LANE_X - LANE_SWAY, LANE_X + LANE_SWAY);
     car.group.position.x = carX;
     car.group.rotation.y = THREE.MathUtils.lerp(car.group.rotation.y, speedMs > 0.3 ? -lateral * 0.04 * dir : 0, Math.min(1, dt * 5));
 
-    // 조도 → 하늘 밝기 (로그 눈금, 연속). 강우량 → 흐림·안개
-    const lux = THREE.MathUtils.clamp(s.in.lux, 0, LUX_MAX);
-    const day = Math.log10(lux + 1) / Math.log10(LUX_MAX + 1);
-    const wet = THREE.MathUtils.clamp(s.in.rain, 0, 100) / 100;
-    const sky = SKY_NIGHT.clone().lerp(SKY_DAY, day ** 1.6).lerp(SKY_RAIN.clone().multiplyScalar(0.25 + day * 0.75), wet * 0.7);
-    scene.background.copy(sky);
-    scene.fog.color.copy(sky);
-    scene.fog.near = 40 - wet * 30;
-    scene.fog.far = 220 - wet * 150;
-    hemi.intensity = 0.04 + 1.1 * day ** 1.4;
-    sun.intensity = 2.8 * day ** 2 * (1 - wet * 0.7);
-    renderer.toneMappingExposure = 0.75 + 0.35 * day;
-    lampMat.emissiveIntensity = (1 - day) ** 3 * 2;       // 가로등은 어두울수록 은은하게 (연출)
-    asphalt.roughness = 0.92 - wet * 0.55;                 // 젖은 노면: 더 매끈하게
-    asphalt.color.setHex(0x2a2b2e).multiplyScalar(1 - wet * 0.35);
+    // 해: HDRI 속 해 방향에서 차를 비춘다 (그림자는 차 주변만)
+    sun.position.copy(car.group.position).addScaledVector(sky.sunDir, 80);
+    sun.target.position.copy(car.group.position);
 
-    // 비
-    const count = Math.round(wet * MAX_DROPS);
-    dropGeo.setDrawRange(0, count * 2);
-    const fall = 22 * dt;
-    for (let i = 0; i < count; i++) {
-      const o = i * 6;
-      dropPos[o + 1] -= fall; dropPos[o + 4] -= fall;
-      dropPos[o + 2] += dz; dropPos[o + 5] += dz;
-      if (dropPos[o + 4] < 0 || dropPos[o + 2] > 14 || dropPos[o + 2] < -50) resetDrop(i, true);
-    }
-    dropGeo.attributes.position.needsUpdate = true;
-    rainLines.position.x = carX;
-
-    car.showBeams(camMode !== 1);
-    car.update(s, dt, speedMs, dir);
-    placeCamera(dt, carX);
-    renderer.render(scene, camera);
+    car.update(s, dt, speedMs, dir, speedMs > 0.3 ? lateral : 0, wet);
+    placeCamera(dt, carX, speedMs * 3.6);
+    if (QUALITY[q].bloom) composer.render(); else renderer.render(scene, camera);
   }
 
   return {
     update,
     nextCamera: () => { camMode = (camMode + 1) % CAMERAS.length; camSnap = true; return CAMERAS[camMode]; },
+    setQuality: (name) => { if (QUALITY[name]) { q = name; applyQuality(); } return QUALITY[q].label; },
+    quality: () => q,
   };
 }
