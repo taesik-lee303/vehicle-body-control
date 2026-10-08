@@ -48,21 +48,28 @@ core.onLog((line) => log(line));
 
 const sim = { paused: false, rate: 1, carry: 0 };
 let state, adas = null;
+let cPath = null;   // 지도 모드면 C 세계로 넘긴 주행 경로·차로
 let crash = null;   // 건물·지도 끝에 막혀 브레이크를 걸고 있는 중이면 그 이유
 
 function exec(cmd) { log('> ' + cmd, 'cmd'); return core.exec(cmd); }
 function sendQuiet(cmd) { return core.exec(cmd); }   // 페달·슬라이더 드래그처럼 자주 바뀌는 것은 로그에 남기지 않음
-// 레이더 센서 모델·전방 맵·Stop & Go를 켠다. 실제 지도에는 가드레일이 없으므로 센서 모델의 가드레일 반사를 끈다
+// 레이더 센서 모델·전방 맵·Stop & Go를 켠다 (실제 지도면 C가 가드레일 반사를 스스로 끈다)
 function adasOn() {
   sendQuiet('adas on');
-  if (mapData) sendQuiet('adas rail off');
+  sendEgo(0);
+}
+// 지도: 화면의 자차 자세를 C 세계에 알려 준다 (코어를 새로 만든 직후에도 바로: 그래야 물체가 자차 앞에 생긴다)
+function sendEgo(dtMs) {
+  if (!cPath) return;
+  const e = world.egoPose(dtMs / 1000);
+  core.setEgo(e.x, e.y, e.yaw, e.yawRate);
 }
 
 const scenario = new ScenarioRunner(core, log, () => {
   if (document.getElementById('drive').checked) sendQuiet('drive on');   // 시나리오가 끝나면 다시 운전 가능하게
   adasOn();
   input.resync();
-});
+}, () => sendEgo(0));
 
 // 시뮬레이션 시간을 ms 진행. 시나리오 재생 중이면 시나리오가 wait 남은 시간만큼 쓴다
 function advance(ms) {
@@ -100,6 +107,7 @@ const actions = {
 const input = setupInput({ exec, sendQuiet, getState: () => state, actions, getAdas: () => adas });
 const toolbox = setupToolbox({
   exec, sendQuiet, sim, actions, getAdas: () => adas, getRadarShow: () => world.radarShow,
+  getLanes: (ahead) => world.lanesAt((adas ? adas.ego_s : 0) + ahead), isMap: () => !!mapData,
   scenarios: {
     list: () => listScenarios('../scenarios/'),
     async play(name) {
@@ -148,6 +156,9 @@ qualityBtns.forEach((b) => b.addEventListener('click', () => {
 }));
 showQuality();
 
+// 실제 지도: 주행 경로와 차로 범위를 C 세계에 넘긴다. 교통 차량은 이 경로의 차로를 따라 달린다 (한 번이면 됨)
+cPath = world.pathForC();
+if (cPath) core.setPath(cPath.xy, cPath.lanes);
 core.init(false);
 sendQuiet('drive on');
 adasOn();
@@ -158,6 +169,7 @@ log('준비됨. I 시동 → D 기어 → ↑ 가속. H 도움말', 'info');
 
 // URL로 시작 장면 지정 (발표용·확인용): ?cmd=lux 300&cmd=rain 70&wait=3&scenario=R5_top_speed.txt&cam=1
 for (const c of params.getAll('cmd')) exec(c);
+if (params.has('scene')) { adas = core.adas(); toolbox.scene(params.get('scene')); }   // ?scene=jam|cutin|ped|bridge: 교통 장면 (레이더 실험)
 if (params.has('wait')) core.advance(Math.round(Number(params.get('wait')) * 1000));
 for (let i = 0; i < Number(params.get('cam') || 0); i++) actions.nextCamera();
 if (params.has('scenario')) toolbox.playScenario(params.get('scenario'));
@@ -187,6 +199,8 @@ function frame(now) {
   if (crash && state.in.speed_mkmh === 0) { crash = null; input.setForceBrake(false); }
   minimap?.update(world.where(), now);
   radarPanel.render(adas, pts);
+  // 지도: 자차 자세(직접 운전 포함)를 C 세계에 알려 준다. 센서 모델은 이 자세로 실제 기하를 본다
+  sendEgo(dt);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

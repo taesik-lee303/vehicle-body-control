@@ -28,4 +28,9 @@ const char *sim_adas(void);
 const float *sim_points(void);
 int sim_points_count(void);
 
+/* 실제 지도: 주행 경로(전역 x, y 점 n개, 닫힌 고리)와 점마다 차로 정보 4개(same_r, same_l, opp_l, lw). n이 0이면 직선 도로 */
+void sim_set_path(const float *xy, const float *lanes, int n);
+/* 화면의 자차 앞 범퍼 자세 (전역 x, y, 방향 yaw, 요레이트). 부를 때마다 세계의 자차가 그 자세가 된다 */
+void sim_set_ego(float x, float y, float yaw, float yaw_rate);
+
 #endif /* SIM_API_H */

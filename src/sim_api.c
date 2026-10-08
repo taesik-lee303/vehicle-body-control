@@ -157,7 +157,8 @@ API const char *sim_adas(void)
     }
     put(&b, "]");
 
-    /* 세계 물체 (시뮬레이터 정답, 화면에 그리기용): [id, 종류, 가까운 면 x, y, 길이, 폭, z0, z1, 속도, 가로 속도] */
+    /* 세계 물체 (시뮬레이터 정답, 화면에 그리기용), 자차 기준:
+     * [id, 종류, 가운데 x, 가운데 y, 길이, 폭, z0, z1, 경로 방향 속도, 가로 속도, 자차 기준 방향] */
     put(&b, ",\"objs\":[");
     int no = 0;
     for (int i = 0; i < WORLD_MAX_OBJ; i++) {
@@ -165,11 +166,13 @@ API const char *sim_adas(void)
         if (!o->used)
             continue;
         const ObjSpec *sp = &OBJ_SPECS[o->kind];
-        Box3 bx = world_box(&a->world, o);
-        put(&b, "%s[%d,\"%s\",%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f]", no++ ? "," : "", o->id, sp->name,
-            (double)bx.x0, o->y, (double)sp->length, (double)sp->width, (double)sp->z0, (double)sp->z1, o->v, o->vy);
+        OBox ob = world_obox(&a->world, o);
+        put(&b, "%s[%d,\"%s\",%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.2f,%.3f]", no++ ? "," : "", o->id, sp->name,
+            (double)ob.cx, (double)ob.cy, (double)sp->length, (double)sp->width, (double)sp->z0, (double)sp->z1, o->v,
+            o->vy, (double)ob.yaw);
     }
-    put(&b, "],\"ego_s\":%.2f,\"gap\":%.2f}", a->world.ego_s, world_truth_gap(&a->world));
+    put(&b, "],\"ego_s\":%.2f,\"path\":%.1f,\"yaw_rate\":%.3f,\"curv\":%.4f,\"gap\":%.2f}", a->world.ego_s,
+        world_path_length(&a->world), a->world.ego_yaw_rate, (double)a->map.curvature, world_truth_gap(&a->world));
     return g_adas;
 }
 
@@ -197,4 +200,15 @@ API const float *sim_points(void)
 API int sim_points_count(void)
 {
     return g_npts;
+}
+
+API void sim_set_path(const float *xy, const float *lanes, int n)
+{
+    world_path_set(xy, lanes, n);
+    world_path_attach(&g_con.adas.world);
+}
+
+API void sim_set_ego(float x, float y, float yaw, float yaw_rate)
+{
+    world_set_ego(&g_con.adas.world, x, y, yaw, yaw_rate);
 }

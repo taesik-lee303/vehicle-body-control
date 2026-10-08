@@ -80,6 +80,7 @@ typedef struct {
     bool ignored;     /* 낮은 정지 물체·측면 오검출로 한 번 판정되면 유지 (가까이 와서 FR 시야를 벗어나도) */
     uint8_t moving_count;
     bool obstacle, in_path;
+    float path_dy;    /* 예측 경로(XM8)에서 가로로 벗어난 양: 트랙 y − 경로 y(x) */
 } Track;
 
 typedef enum { MAP_NONE, MAP_REDUCED, MAP_OK } MapStatus; /* XM10 */
@@ -98,11 +99,19 @@ typedef struct {
     vbc_ms_t last_step_ms;
     bool stepped;
     float ego_v;             /* 마지막 주기의 자차 속도 m/s (후진이면 음수) */
+    float yaw_rate;          /* 자차 요레이트 rad/s (왼쪽 +). 예측 경로 곡률 = 요레이트 / 속도 (XM8) */
+    float curvature;         /* 마지막 주기의 예측 경로 곡률 1/m */
 } AdasMap;
 
 void map_init(AdasMap *m);
 void map_rx_frame(AdasMap *m, vbc_ms_t now, const RadarFrame *f, const VbcContext *ctx);
 void map_step(AdasMap *m, vbc_ms_t now, const VbcContext *ctx);
+
+/* 요레이트 센서 값 (rad/s, 왼쪽으로 돌면 +). 넣지 않으면 0 = 직진 경로 */
+void map_set_yaw_rate(AdasMap *m, float rate);
+
+/* 예측 경로의 가로 위치 y(x) = 곡률 × x² / 2 */
+float map_path_y(const AdasMap *m, float x);
 
 /* 선행 차량. 없으면 NULL */
 const Track *map_lead(const AdasMap *m);

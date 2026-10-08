@@ -398,8 +398,21 @@ static void track_all(AdasMap *m, vbc_ms_t now, float dt, float v_ego)
 
 /* ---- XM6~XM8 분류 ---- */
 
+void map_set_yaw_rate(AdasMap *m, float rate)
+{
+    m->yaw_rate = rate;
+}
+
+float map_path_y(const AdasMap *m, float x)
+{
+    return m->curvature * x * x / 2.0f;
+}
+
 static void classify(AdasMap *m, float v_ego)
 {
+    /* XM8 예측 경로: 곡률 = 요레이트 / 속도 (1 m/s 아래는 직진, 반지름 5 m보다 급하게는 안 봄) */
+    float k = fabsf(v_ego) > 1.0f ? m->yaw_rate / v_ego : 0.0f;
+    m->curvature = k > 0.2f ? 0.2f : k < -0.2f ? -0.2f : k;
     for (int i = 0; i < MAP_MAX_TRACKS; i++) {
         Track *t = &m->tracks[i];
         if (!t->used)
@@ -431,7 +444,9 @@ static void classify(AdasMap *m, float v_ego)
         if (t->ever_moving)
             t->ignored = false;
         t->obstacle = !(high || t->ignored);
-        t->in_path = t_ymax(t) >= -MAP_PATH_HALF - EPS && t_ymin(t) <= MAP_PATH_HALF + EPS; /* XM8 */
+        float yc = map_path_y(m, t->x);
+        t->path_dy = t->y - yc;
+        t->in_path = t_ymax(t) - yc >= -MAP_PATH_HALF - EPS && t_ymin(t) - yc <= MAP_PATH_HALF + EPS; /* XM8 */
     }
 }
 
@@ -463,8 +478,8 @@ static void select_lead(AdasMap *m, vbc_ms_t now)
     Track *lead = find_track(m, m->lead_id);
     if (lead && (!lead->confirmed || !lead->obstacle))
         lead = NULL;
-    if (lead && hold_timer_update(&m->lead_out, now, fabsf(lead->y) > 1.8f, 500))
-        lead = NULL; /* 0.5초 연속 |y| > 1.8 m */
+    if (lead && hold_timer_update(&m->lead_out, now, fabsf(lead->path_dy) > 1.8f, 500))
+        lead = NULL; /* 0.5초 연속 예측 경로에서 1.8 m 넘게 벗어남 */
 
     if (!lead) {
         lead = nearest;

@@ -27,10 +27,12 @@ export async function listScenarios(base = '../scenarios/') {
 
 export class ScenarioRunner {
   // core: {init, exec, advance, state}, log(text, cls), onEnd(result)
-  constructor(core, log, onEnd = () => {}) {
+  // onInit: 코어를 초기화한 직후 (화면이 자차 자세 등을 다시 알려 줄 때)
+  constructor(core, log, onEnd = () => {}, onInit = () => {}) {
     this.core = core;
     this.log = log;
     this.onEnd = onEnd;
+    this.onInit = onInit;
     this.active = false;
   }
 
@@ -44,6 +46,7 @@ export class ScenarioRunner {
     this.frac = 0;
     this.active = true;
     this.core.init(false);
+    this.onInit();
     this.log(`== 시나리오 시작: ${name} (초기 상태에서)`, 'info');
     this.run();
   }

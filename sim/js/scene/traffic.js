@@ -125,12 +125,12 @@ export function createTraffic(scene) {
   const items = new Map();   // id → { obj, kind }
 
   const at = new THREE.Vector3();
-  // objs: sim_adas().objs = [id, 종류, 가까운 면 x, y, 길이, 폭, z0, z1, 속도, 가로 속도]
-  // mapper: point(x, y, z, out) 도로 좌표 → 화면, heading(x) 그 자리의 도로 방향
+  // objs: sim_adas().objs = [id, 종류, 가운데 x, 가운데 y, 길이, 폭, z0, z1, 속도, 가로 속도, 자차 기준 방향] (자차 기준)
+  // mapper: point(x, y, z, out) 자차 기준 → 화면, egoHeading() 자차 방향
   function update(objs, dark, mapper) {
     const seen = new Set();
     for (const o of objs || []) {
-      const [id, kind, x0, y, len, , , , v] = o;
+      const [id, kind, xc, y, , , , , , , yaw] = o;
       let it = items.get(id);
       if (!it || it.kind !== kind) {
         if (it) group.remove(it.obj);
@@ -138,10 +138,8 @@ export function createTraffic(scene) {
         items.set(id, it);
         group.add(it.obj);
       }
-      const xc = x0 + len / 2;
       it.obj.position.copy(mapper.point(xc, y, 0, at));
-      const flip = (kind === 'car' || kind === 'truck') && v < -0.1 ? Math.PI : 0;   // 반대 방향 차는 돌려 세운다
-      it.obj.rotation.y = mapper.heading(xc) + flip;
+      it.obj.rotation.y = mapper.egoHeading() + yaw;   // 반대 방향 차는 C가 이미 180° 돌려 준다
       it.obj.visible = xc > -80 && xc < 400;
       if (it.obj.userData.tail) it.obj.userData.tail.emissiveIntensity = 0.4 + 1.6 * dark;
       seen.add(id);

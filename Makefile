@@ -47,7 +47,7 @@ scenarios: $(BUILD)/vbc
 SIM_OUT := sim/build/vbc.js
 EMCC ?= emcc
 EMFLAGS := -O2 -sMODULARIZE -sEXPORT_ES6 -sSINGLE_FILE -sENVIRONMENT=web \
-	-sEXPORTED_FUNCTIONS=_sim_init,_sim_exec,_sim_advance,_sim_state,_sim_adas,_sim_points,_sim_points_count \
+	-sEXPORTED_FUNCTIONS=_sim_init,_sim_exec,_sim_advance,_sim_state,_sim_adas,_sim_points,_sim_points_count,_sim_set_path,_sim_set_ego,_malloc,_free \
 	-sEXPORTED_RUNTIME_METHODS=cwrap,UTF8ToString,HEAPF32
 
 wasm: $(SIM_OUT)

@@ -213,6 +213,7 @@ static void adas_tick(Console *c)
     for (int id = 0; id < RADAR_COUNT; id++)
         if (radar_sim_frame(&a->radar, (RadarId)id, &a->world, v, &a->frame))
             map_rx_frame(&a->map, c->now, &a->frame, &c->sys.ctx);
+    map_set_yaw_rate(&a->map, (float)a->world.ego_yaw_rate); /* 요레이트 센서 (XM8 예측 경로) */
     map_step(&a->map, c->now, &c->sys.ctx);
 }
 

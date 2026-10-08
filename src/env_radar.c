@@ -185,7 +185,30 @@ typedef struct {
     V3 s;
     const World *w;
     double ego_v;
+    OBox box[WORLD_MAX_OBJ]; /* 이번 프레임의 물체 상자 (자차 기준) */
+    bool used[WORLD_MAX_OBJ];
 } Gen;
+
+/* 자차 기준 점 → 상자 자기 좌표 (u 물체 앞, v 물체 왼쪽) */
+static V3 to_local(const OBox *b, V3 p)
+{
+    double c = cos(b->yaw), sn = sin(b->yaw), dx = p.x - b->cx, dy = p.y - b->cy;
+    V3 q = {dx * c + dy * sn, -dx * sn + dy * c, p.z};
+    return q;
+}
+
+static V3 from_local(const OBox *b, V3 q)
+{
+    double c = cos(b->yaw), sn = sin(b->yaw);
+    V3 p = {b->cx + q.x * c - q.y * sn, b->cy + q.x * sn + q.y * c, q.z};
+    return p;
+}
+
+static Box3 local_box(const OBox *b)
+{
+    Box3 r = {-b->hl, b->hl, -b->hw, b->hw, b->z0, b->z1};
+    return r;
+}
 
 /* 같은 분해능 칸이면 하나로 합친다 (XH5). 센 쪽을 남긴다 */
 static void emit(Gen *g, V3 p, V3 vel, double margin)
@@ -229,11 +252,11 @@ static void emit(Gen *g, V3 p, V3 vel, double margin)
 static bool occluded(const Gen *g, V3 p, int skip)
 {
     for (int j = 0; j < WORLD_MAX_OBJ; j++) {
-        const WorldObj *o = &g->w->obj[j];
-        if (!o->used || j == skip)
+        if (!g->used[j] || j == skip)
             continue;
-        Box3 b = world_box(g->w, o);
-        if (segment_hits_box(g->s, p, &b))
+        const OBox *b = &g->box[j];
+        Box3 lb = local_box(b);
+        if (segment_hits_box(to_local(b, g->s), to_local(b, p), &lb))
             return true;
     }
     return false;
@@ -243,8 +266,9 @@ static void gen_object(Gen *g, int idx)
 {
     const WorldObj *o = &g->w->obj[idx];
     const ObjSpec *sp = &OBJ_SPECS[o->kind];
-    Box3 b = world_box(g->w, o);
-    V3 c = {(b.x0 + b.x1) / 2.0, (b.y0 + b.y1) / 2.0, (b.z0 + b.z1) / 2.0};
+    const OBox *ob = &g->box[idx];
+    Box3 b = local_box(ob);
+    V3 c = {ob->cx, ob->cy, (ob->z0 + ob->z1) / 2.0};
     Polar qc = to_sensor(g->m, c);
     if (qc.r > g->m->range_max_m + 20.0)
         return;
@@ -259,8 +283,9 @@ static void gen_object(Gen *g, int idx)
     /* 점이 많으면 건너뛰지 않고 간격을 넓혀 고르게 뽑는다 (XH2) */
     Face faces[3];
     int nf, total;
+    V3 s_local = to_local(ob, g->s);
     for (;;) {
-        nf = visible_faces(&b, g->s, spacing, faces);
+        nf = visible_faces(&b, s_local, spacing, faces);
         total = 0;
         for (int i = 0; i < nf; i++)
             total += faces[i].nu * faces[i].nv;
@@ -269,13 +294,13 @@ static void gen_object(Gen *g, int idx)
         spacing *= 1.15;
     }
 
-    V3 vel = {o->v - g->ego_v, o->vy, 0.0}; /* 상대속도 */
+    V3 vel = {ob->vx - g->ego_v, ob->vy, 0.0}; /* 상대속도 (자차 축) */
     for (int i = 0; i < nf; i++) {
         int n = faces[i].nu * faces[i].nv;
         for (int j = 0; j < n; j++) {
             if (uniform(&g->rs->rng) >= POINT_KEEP)
                 continue;
-            V3 p = face_point(&faces[i], j);
+            V3 p = from_local(ob, face_point(&faces[i], j));
             if (occluded(g, p, idx))
                 continue;
             emit(g, p, vel, margin);
@@ -314,7 +339,16 @@ static void gen_clutter(Gen *g)
 static void generate(RadarSim *rs, RadarId id, const World *w, double ego_v, RadarFrame *f)
 {
     const RadarMount *m = &RADAR_MOUNTS[id];
-    Gen g = {rs, m, f, {m->x, m->y, m->z}, w, ego_v};
+    static Gen g;
+    memset(&g, 0, sizeof g);
+    g.rs = rs;
+    g.m = m;
+    g.f = f;
+    g.s.x = m->x;
+    g.s.y = m->y;
+    g.s.z = m->z;
+    g.w = w;
+    g.ego_v = ego_v;
     int order[WORLD_MAX_OBJ], n = 0;
     double dist[WORLD_MAX_OBJ];
 
@@ -322,8 +356,9 @@ static void generate(RadarSim *rs, RadarId id, const World *w, double ego_v, Rad
     for (int i = 0; i < WORLD_MAX_OBJ; i++) {
         if (!w->obj[i].used)
             continue;
-        Box3 b = world_box(w, &w->obj[i]);
-        double cx = (b.x0 + b.x1) / 2.0, cy = (b.y0 + b.y1) / 2.0;
+        g.box[i] = world_obox(w, &w->obj[i]);
+        g.used[i] = true;
+        double cx = g.box[i].cx, cy = g.box[i].cy;
         double d2 = cx * cx + cy * cy;
         int j = n++;
         while (j > 0 && dist[j - 1] > d2) {

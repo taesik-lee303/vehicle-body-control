@@ -412,6 +412,104 @@ TEST(xm10_map_status)
     CHECK_EQ(g_m.lead_id, 0);
 }
 
+/* ---- 실제 지도 경로 (8.3): 반지름 50 m 왼쪽으로 도는 원 ---- */
+
+#define CIRCLE_N 400
+#define CIRCLE_R 50.0
+static float g_xy[CIRCLE_N * 2], g_lanes[CIRCLE_N * 4];
+
+static void circle_path(float same_r, float same_l, float opp_l)
+{
+    for (int i = 0; i < CIRCLE_N; i++) {
+        double t = 2 * 3.14159265358979 * i / CIRCLE_N;
+        g_xy[i * 2] = (float)(CIRCLE_R * sin(t));
+        g_xy[i * 2 + 1] = (float)(CIRCLE_R - CIRCLE_R * cos(t));
+        g_lanes[i * 4] = same_r;
+        g_lanes[i * 4 + 1] = same_l;
+        g_lanes[i * 4 + 2] = opp_l;
+        g_lanes[i * 4 + 3] = 3.0f;
+    }
+    world_path_set(g_xy, g_lanes, CIRCLE_N);
+}
+
+TEST(path_pose_follows_curve)
+{
+    static World w;
+    circle_path(-4.5f, 1.5f, 7.5f);
+    world_init(&w);
+    Pose2 a = world_path_pose(&w, 0.0, 0.0), b = world_path_pose(&w, 3.14159265 * CIRCLE_R / 2, 0.0);
+    CHECK(fabs(a.x) < 0.1 && fabs(a.y) < 0.1 && fabs(a.yaw) < 0.03);
+    CHECK(fabs(b.x - 50.0) < 0.2 && fabs(b.y - 50.0) < 0.2 && fabs(b.yaw - 1.5708) < 0.03);
+    int id = world_add(&w, OBJ_CAR, 20.0, 0.0, 0.0); /* 경로를 따라 20 m 앞 = 왼쪽으로 휘어 있음 */
+    OBox o = world_obox(&w, world_find(&w, id));
+    CHECK(o.cy > 4.0f && o.yaw > 0.3f && o.cx > 15.0f && o.cx < 23.0f);
+    world_path_set(NULL, NULL, 0);
+}
+
+/* 차로가 하나뿐인 구간에서는 옆 차로로 보낸 차가 내 차로로 합류한다 (차선 이탈 방지) */
+TEST(path_lane_clamp_keeps_cars_on_road)
+{
+    static World w;
+    circle_path(-1.5f, 1.5f, 1.5f); /* 같은 방향 한 차로, 반대 차로 없음 */
+    world_init(&w);
+    int id = world_add(&w, OBJ_CAR, 20.0, -3.2, 30.0 / 3.6);
+    for (int k = 0; k < 100; k++)
+        world_step(&w, 0.05, 0.0);
+    const WorldObj *o = world_find(&w, id);
+    CHECK(fabs(o->y) <= 0.36);
+    world_path_set(NULL, NULL, 0);
+}
+
+/* 직접 운전: 화면이 알려 준 자세를 경로에 투영한다 */
+TEST(external_ego_projects_onto_path)
+{
+    static World w;
+    circle_path(-4.5f, 1.5f, 7.5f);
+    world_init(&w);
+    world_set_ego(&w, 50.0, 50.0, 1.5708, 0.2);
+    CHECK(fabs(w.ego_s - 3.14159265 * CIRCLE_R / 2) < 1.0);
+    world_set_ego(&w, 51.0, 52.0, 1.6, 0.2); /* 경로에서 1 m 벗어나도 */
+    CHECK(fabs(w.ego_s - (3.14159265 * CIRCLE_R / 2 + 2.0)) < 1.5);
+    world_path_set(NULL, NULL, 0);
+}
+
+/* 굽은 길의 앞차: 센서 모델이 회전된 상자의 점을 그 자리에서 낸다 */
+TEST(radar_sees_car_on_curve)
+{
+    static World w;
+    static RadarSim rs;
+    circle_path(-4.5f, 1.5f, 7.5f);
+    world_init(&w);
+    radar_sim_init(&rs, 11);
+    int id = world_add(&w, OBJ_CAR, 25.0, 0.0, 0.0);
+    OBox o = world_obox(&w, world_find(&w, id));
+    int near = 0;
+    for (int k = 0; k < 5; k++) {
+        radar_sim_frame(&rs, RADAR_FR, &w, 0.0, &g_f);
+        for (int i = 0; i < g_f.count; i++) {
+            float a = g_f.det[i].az_deg * 0.0174533f, r = g_f.det[i].range_m;
+            float x = r * cosf(a), y = r * sinf(a);
+            near += hypotf(x - o.cx, y - o.cy) < 3.0f;
+        }
+    }
+    CHECK(near > 0);
+    world_path_set(NULL, NULL, 0);
+}
+
+/* XM8: 요레이트로 예측한 곡선 경로. 10 m/s, 0.2 rad/s → 곡률 0.02, 20 m 앞 경로 y = 4 m */
+TEST(xm8_curved_path_from_yaw_rate)
+{
+    VbcContext c = ctx_at(36);
+    map_init(&g_m);
+    for (int i = 1; i <= 4; i++)
+        cycle(&g_m, 50u * (unsigned)i, (uint8_t)i, 20, 4.0f, 0.8f, &c);
+    CHECK(only_track(&g_m) && !only_track(&g_m)->in_path); /* 직진으로 보면 경로 밖 */
+    map_set_yaw_rate(&g_m, 0.2f);
+    cycle(&g_m, 250, 5, 20, 4.0f, 0.8f, &c);
+    CHECK(only_track(&g_m) && only_track(&g_m)->in_path); /* 왼쪽으로 도는 중이면 경로 안 */
+    CHECK(fabsf(map_path_y(&g_m, 20.0f) - 4.0f) < 0.01f);
+}
+
 int main(void)
 {
     printf("test_radar\n");
@@ -434,5 +532,10 @@ int main(void)
     RUN(xm6_low_boundary);
     RUN(xm8_path_boundary);
     RUN(xm10_map_status);
+    RUN(xm8_curved_path_from_yaw_rate);
+    RUN(path_pose_follows_curve);
+    RUN(path_lane_clamp_keeps_cars_on_road);
+    RUN(external_ego_projects_onto_path);
+    RUN(radar_sees_car_on_curve);
     return test_summary();
 }

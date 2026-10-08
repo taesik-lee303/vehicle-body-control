@@ -13,7 +13,8 @@ export const sliderFromLux = (lux) => Math.round((Math.log10(Math.max(0, Math.mi
 const RADAR_MODES = [['ok', '정상'], ['cut', '끊김'], ['repeat', '프레임 반복'], ['stuck', '값 고착'], ['block', '가림']];
 const SG_KO = { off: '꺼짐', standby: '대기', active: '작동', hold: '정지 유지', wait: '재출발 대기' };
 
-export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas = () => null, getRadarShow = () => ({}) }) {
+export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas = () => null, getRadarShow = () => ({}),
+  getLanes = () => ({ right: -3.6, left: null, opp: 3.6 }), isMap = () => false }) {
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => [...document.querySelectorAll(sel)];
   const root = $('#toolbox');
@@ -100,30 +101,38 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas
   let simT = 0;
   const later = (ms, run) => pending.push({ t: simT + ms, run });
   const newestId = () => (getAdas()?.objs || []).reduce((m, o) => Math.max(m, o[0]), 0);
+  // 물체: [id, 종류, 가운데 x, 가운데 y, 길이, ...] (자차 기준)
   const laneLead = () => {
     let best = null;
     for (const o of getAdas()?.objs || []) {
-      const [, kind, x0, y] = o;
-      if ((kind === 'car' || kind === 'truck') && Math.abs(y) < 1.3 && x0 > 0 && (!best || x0 < best[2])) best = o;
+      const [, kind, xc, y, len] = o;
+      if ((kind === 'car' || kind === 'truck') && Math.abs(y) < 1.3 && xc - len / 2 > 0 && (!best || xc < best[2])) best = o;
     }
     return best;
   };
+  // 옆 차로는 그 자리에 실제로 있을 때만 쓴다 (지도는 구간마다 차로 수가 다르다)
+  const side = (ahead) => { const L = getLanes(ahead); return L.right ?? L.left; };
   const SCENES = {
     jam() {
       exec('obj clear');
-      for (const c of ['car 18 0 30', 'car 31 0 30', 'truck 44 0 30', 'car 12 -3.6 33', 'car 36 -3.6 31', 'car 120 3.6 -40'])
-        exec(`obj add ${c}`);
+      for (const c of ['car 18 0 30', 'car 31 0 30', 'truck 44 0 30']) exec(`obj add ${c}`);
+      for (const [ahead, v] of [[12, 33], [36, 31]]) { const y = side(ahead); if (y !== null) exec(`obj add car ${ahead} ${y.toFixed(2)} ${v}`); }
+      const opp = getLanes(120).opp;
+      if (opp !== null) exec(`obj add car 120 ${opp.toFixed(2)} -40`);
     },
     cutin() {
+      const y = side(6);
+      if (y === null) { exec('obj clear'); exec('obj add car 45 0 30'); return; }   // 옆 차로가 없는 곳
       exec('obj clear');
       exec('obj add car 45 0 30');
-      exec('obj add car 6 -3.6 32');
+      exec(`obj add car 6 ${y.toFixed(2)} 32`);
       const id = newestId();
       later(3000, () => exec(`obj ${id} lane 0 1.2`));
     },
     ped() {
-      exec('obj add ped 14 5.5 0');
-      exec(`obj ${newestId()} lane -6 1.3`);
+      const L = getLanes(14), from = (L.opp ?? L.left ?? 1.5) + 3, to = (L.right ?? 0) - 4.5;
+      exec(`obj add ped 14 ${from.toFixed(1)} 0`);
+      exec(`obj ${newestId()} lane ${to.toFixed(1)} 1.3`);
     },
     bridge() {
       exec('obj clear');
@@ -184,5 +193,6 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas
     $$('[data-rate]').forEach((b) => b.classList.toggle('active', Number(b.dataset.rate) === sim.rate));
   }
 
-  return { sync, toggle: () => root.classList.toggle('collapsed'), playScenario: scenarios.play };
+  return { sync, toggle: () => root.classList.toggle('collapsed'), playScenario: scenarios.play,
+    scene: (name) => SCENES[name] && SCENES[name]() };
 }

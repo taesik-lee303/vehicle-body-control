@@ -614,6 +614,42 @@ export function createCity(scene, data) {
     return best && bd < 1.5 ? data.names[data.roads[best.ri].n] || '이름 없는 길' : '';
   }
 
+  // ---- 경로 점마다 차로 범위 (레이더 실험의 교통 차량용, 경로 기준 y 왼쪽 +) ----
+  // [같은 방향 오른쪽 끝, 같은 방향 왼쪽 끝, 반대 방향 왼쪽 끝, 차로 폭]. 양방향이면 가운데선까지가 같은 방향
+  function laneTable() {
+    const n = path.X.length, out = new Float32Array(n * 4);
+    const raw = [];
+    for (let i = 0; i < n; i++) {
+      const a = (i - 1 + n) % n, b = (i + 1) % n;
+      let fx = path.X[b] - path.X[a], fz = path.Z[b] - path.Z[a];
+      const fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+      const rx = -fz, rz = fx;                       // 경로 오른쪽
+      const px = path.X[i], pz = path.Z[i];
+      const want = data.route.n[i];
+      let best = null, bd = Infinity, bestAny = null, bdAny = Infinity;
+      for (const q of rgrid.near(px, pz)) {
+        const d = Math.hypot(px - q.x, pz - q.z);
+        if (d < bdAny) { bdAny = d; bestAny = q; }
+        if (data.roads[q.ri].n === want && d < bd) { bd = d; best = q; }
+      }
+      const q = best || bestAny;
+      if (!q || Math.hypot(px - q.x, pz - q.z) > q.hw + 1) { raw.push(null); continue; }
+      const road = data.roads[q.ri], hw = road.w / 2, lw = road.w / Math.max(1, road.l);
+      const off = (px - q.x) * rx + (pz - q.z) * rz;   // 경로가 도로 중심선보다 오른쪽으로 몇 m
+      raw.push(road.o ? [off - hw, off + hw, off + hw, lw] : [off - hw, off, off + hw, lw]);
+    }
+    // 교차로에서 다른 길을 잡는 튐을 줄인다 (앞뒤 5점 중앙값), 못 찾은 곳은 내 차로만
+    for (let i = 0; i < n; i++) {
+      for (let k = 0; k < 4; k++) {
+        const vals = [];
+        for (let d = -5; d <= 5; d++) { const r = raw[(i + d + n) % n]; if (r) vals.push(r[k]); }
+        vals.sort((x, y) => x - y);
+        out[i * 4 + k] = vals.length ? vals[vals.length >> 1] : [-1.5, 1.5, 1.5, 3.0][k];
+      }
+    }
+    return out;
+  }
+
   const counts = { roads: data.roads.length, buildings: data.buildings.length, trees: trees.length, lamps: lamps.length };
-  return { path, update, counts, heightAt: H, collide, roadAt };
+  return { path, update, counts, heightAt: H, collide, roadAt, laneTable };
 }
