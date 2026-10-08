@@ -1,0 +1,188 @@
+# 조명 L1~L6 테스트 케이스 (make con-lighting 으로 실행되는 lighting_step만 시험)
+# 시작 상태: 시동 OFF, 조도 30000, 조명 스위치 OFF, 와이퍼 단계(level) 정지
+# 와이퍼 모듈은 실행하지 않는다. L6은 level을 직접 넣어 시험한다.
+# 기대값은 사양서 5.1 L1~L6, 4장 C1·C2·C4. obs는 사양서에 정해지지 않은 동작.
+
+tc TC-L-C5-01 | C5 | 시작 상태 | 초기 상태 | 전조등 꺼짐, 조도 고장 표시 꺼짐
+e headlight off
+e luxlamp off
+
+tc TC-L1-01 | L1 > L4 | 결정 테이블 | 시동 OFF, 스위치 ON | 꺼짐
+light on
+e headlight off
+tc TC-L4-01 | L4 | 결정 테이블 | 시동 ON, 스위치 ON (조도 30000) | 켜짐
+ign on
+e headlight on
+tc TC-L4-02 | L4 | 결정 테이블 | 스위치 OFF, 조도 300, 2초 | 꺼짐 (어두워도)
+light off
+lux 300
+t 2
+e headlight off
+
+tc TC-L2-01 | L2, C1 | 경계값(시간 3-value) | 처음부터 시동 ON, AUTO, 조도 999 후 0.999초 | 꺼짐
+r
+ign on
+light auto
+lux 999
+t 0.999
+e headlight off
+tc TC-L2-02 | L2, C1 | 경계값(시간 3-value) | 이어서 +1ms (1.000초) | 켜짐
+t 0.001
+e headlight on
+tc TC-L2-03 | L2 | 경계값(조도 3-value) | 처음부터 시동 ON, AUTO, 조도 1000, 3초 | 꺼짐 (1000 미만 아님)
+r
+ign on
+light auto
+lux 1000
+t 3
+e headlight off
+tc TC-L2-04 | L2, C1 | 상태 전이(연속 끊김 → 다시 셈) | 조도 300 0.9초 → 1000 0.1초 → 300 0.999초 | 꺼짐 (처음부터 다시 셈)
+lux 300
+t 0.9
+lux 1000
+t 0.1
+lux 300
+t 0.999
+e headlight off
+tc TC-L2-05 | L2, C1 | 상태 전이(연속 끊김 → 다시 셈) | 이어서 +1ms | 켜짐
+t 0.001
+e headlight on
+tc TC-L3-01 | L3, C1 | 경계값(시간 3-value) | 켜진 상태에서 조도 1501, 2.999초 | 켜짐
+lux 1501
+t 2.999
+e headlight on
+tc TC-L3-02 | L3, C1 | 경계값(시간 3-value) | 이어서 +1ms (3.000초) | 꺼짐
+t 0.001
+e headlight off
+tc TC-L3-03 | L3 | 경계값(조도) + 직전 유지 | 조도 300으로 켠 뒤 조도 1500, 5초 | 켜짐 유지 (1500 초과 아님)
+lux 300
+t 1
+e headlight on
+lux 1500
+t 5
+e headlight on
+tc TC-L3-04 | L3 | 동치(1000~1500 직전 유지, 꺼진 상태) | 조도 30000으로 끈 뒤 조도 1200, 5초 | 꺼짐 유지
+lux 30000
+t 3
+e headlight off
+lux 1200
+t 5
+e headlight off
+tc TC-L2-06 | L2, C1 | 동치(AUTO가 아닐 때 세지 않음) | 스위치 OFF, 조도 300 0.5초 → AUTO 0.999초 | 꺼짐 (AUTO부터 셈)
+light off
+lux 300
+t 0.5
+light auto
+t 0.999
+e headlight off
+t 0.001
+e headlight on
+
+tc TC-L5-01 | L5 > L4 | 동치(무효: 위) | 처음부터 시동 ON, 스위치 OFF, 조도 60001 | 켜짐 + 고장 표시
+r
+ign on
+light off
+lux 60001
+e headlight on
+e luxlamp on
+tc TC-L5-02 | L5, C2 | 경계값(유효 상한) | 조도 60000 | 꺼짐(L4 OFF), 고장 표시 꺼짐
+lux 60000
+e headlight off
+e luxlamp off
+tc TC-L5-03 | L5, C2 | 동치(무효: 아래) | 조도 -1 | 켜짐 + 고장 표시
+lux -1
+e headlight on
+e luxlamp on
+tc TC-L5-04 | L5, C2 | 경계값(시간 3-value) | 조도 30000 후 조도 송신만 끊고 0.499 / 0.500초 | 표시 꺼짐 → 켜짐
+lux 30000
+cut lux
+t 0.499
+e luxlamp off
+t 0.001
+e luxlamp on
+e headlight on
+tc TC-L5-05 | L5, L1 | 결정 테이블(표시는 시동 무관) | 이어서 시동 OFF | 전조등 꺼짐, 고장 표시 유지
+ign off
+e headlight off
+e luxlamp on
+tc TC-L5-06 | L5, C2 | 상태 전이(복귀) | 시동 ON, 조도 송신 재개 | 고장 표시 꺼짐
+ign on
+resume lux
+e luxlamp off
+
+tc TC-L6-01 | L6, C1 | 경계값(시간 3-value) | 처음부터 시동 ON, AUTO, 낮, level 저속 9.999초 | 꺼짐
+r
+ign on
+light auto
+level low
+t 9.999
+e headlight off
+tc TC-L6-02 | L6, C1 | 경계값(시간 3-value) | 이어서 +1ms (10.000초) | 켜짐
+t 0.001
+e headlight on
+tc TC-L6-03 | L6 | 상태 전이(작동하는 동안 유지) | 이어서 5초 | 켜짐
+t 5
+e headlight on
+tc TC-L6-04 | L6, L3, C1 | 상태 전이(해제) | level 정지 | 바로 꺼짐 (밝음 3초는 그동안 계속 셈)
+level stop
+e headlight off
+tc TC-L6-05 | L6 | 동치(간헐도 작동) | level 간헐 10초 | 켜짐
+level int
+t 10
+e headlight on
+tc TC-L6-06 | L6 | 동치(AUTO가 아니면 L6 아님) | 처음부터 시동 ON, 스위치 OFF, level 고속 10초 | 꺼짐 (L4)
+r
+ign on
+light off
+level high
+t 10
+e headlight off
+tc TC-L6-07 | L6, C1 | 결정 테이블(L4가 정하는 동안에도 셈) | 이어서 AUTO로 | 바로 켜짐 (10초는 이미 셈)
+light auto
+e headlight on
+
+tc TC-L-C4-01 | L1, C4 | 경계값(시간 3-value) | 처음부터 시동 ON, 스위치 ON, 세 신호 끊고 0.499 / 0.500초 | 켜짐 → 꺼짐 (시동 꺼짐으로 봄)
+r
+ign on
+light on
+cut vehicle
+t 0.499
+e headlight on
+t 0.001
+e rxlost yes
+e headlight off
+
+tc TC-L-Q11-01 | (정의 없음) Q11 | Negative(조명 스위치 코드) | 처음부터 시동 ON, 스위치 ON(켜짐) → 코드 7, 조도 300·30000 각 5초 | 스위치 코드 정의 안 됨 판정. 동작은 관찰
+r
+ign on
+light on
+light 7
+e lightvalid no
+obs headlight
+lux 300
+t 5
+obs headlight
+lux 30000
+t 5
+obs headlight
+tc TC-L-Q11-02 | (정의 없음) Q11 | Negative(조명 스위치 코드) | 처음부터 시동 ON, 꺼진 상태에서 코드 -1, level 저속 10초 | 관찰
+r
+ign on
+light -1
+level low
+t 10
+obs headlight
+tc TC-L-Q9-01 | (정의 없음) Q9 | Negative(시동 코드) | 처음부터 스위치 ON, 시동 코드 2 | 관찰
+r
+light on
+ign 2
+e ignvalid no
+obs headlight
+tc TC-L-IF-01 | (모듈 간 약속) L6 | Negative(와이퍼 단계 코드) | 처음부터 시동 ON, AUTO, level 코드 9 10초 | 관찰 (와이퍼 모듈이 내보낼 수 없는 값)
+r
+ign on
+light auto
+level 9
+t 10
+obs headlight
+q

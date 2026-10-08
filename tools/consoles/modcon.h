@@ -1,10 +1,17 @@
 /*
- * modcon.h - 모듈별 대화형 테스트 콘솔의 공통 틀
+ * modcon.h - 모듈별 테스트 콘솔 (신호 주입기)
  *
- * 한 모듈의 step 함수만 호출해서 그 모듈 코드를 직접 확인한다 (다른 모듈은 끼어들지 않는다).
- * 사용자가 메뉴에서 입력값을 바꾸면 그 시각에 바로 반영하고, 바뀐 출력을 보여 준다.
- * 판정(C2 센서 고장, C3 유효한 속도, C4 수신 중단)은 실제와 같게 common.c의 vbc_build_context()가 한다.
- * 속도·기어·시동·조도·강우량은 사양서 3.1대로 시간이 흐르는 동안 0.05초마다 자동으로 다시 보낸다.
+ * 한 모듈의 step 함수만 호출해서 그 모듈 코드를 직접 확인한다 (다른 모듈은 실행하지 않는다).
+ *
+ * 원칙: 테스트 도구는 입력을 거르지 않는다.
+ *   - 모든 신호를 정수 코드 그대로 넣는다 (기어 7, 시동 2, 도어 5, 스위치 -1 같은 정의 안 된 코드도).
+ *     정의 안 된 값을 어떻게 다룰지는 제품 코드(common.c, 각 모듈)가 정할 일이다.
+ *   - 신호마다 따로 끊고(cut) 잇고(resume), 한 번만 보낼(send) 수 있다. 자동 재송신도 끌 수 있다.
+ *   - 시간은 1ms 단위로 진행한다. 판단(step) 주기와 송신 주기를 바꿀 수 있다.
+ * 판정(C2~C4, 코드 유효성)은 실제와 같은 common.c의 vbc_build_context()가 한다.
+ *
+ * 입력 방법: 메뉴 번호, 또는 명령 한 줄 (docs/test/README.md, help 명령).
+ * 파일로 넣으면 '#' 줄은 설명, tc/e/obs 명령으로 테스트 케이스 결과를 자동 판정·기록한다.
  */
 
 #ifndef MODCON_H
@@ -12,24 +19,17 @@
 
 #include "common.h"
 
-#define MODCON_TICK_MS 50u
-
-/* 이 콘솔에서 바꿀 수 있는 입력 (메뉴에 나오는 항목) */
+/* 메뉴에 보여 줄 신호 (모듈이 쓰는 입력). 명령으로는 모든 신호를 넣을 수 있다 */
 enum {
-    IN_IGN = 1 << 0,         /* 시동 (켜기/끄기 전환) */
-    IN_GEAR = 1 << 1,        /* 기어 */
-    IN_SPEED = 1 << 2,       /* 속도 */
-    IN_LUX = 1 << 3,         /* 조도 */
-    IN_RAIN = 1 << 4,        /* 강우량 */
-    IN_DOORS = 1 << 5,       /* 도어 4개 */
-    IN_LIGHT_SW = 1 << 6,    /* 조명 스위치 */
-    IN_WIPER_SW = 1 << 7,    /* 와이퍼 스위치 */
-    IN_WIPER_LEVEL = 1 << 8, /* 와이퍼 단계 (조명 L6 확인용으로 직접 정함) */
-    IN_CUT_VEHICLE = 1 << 9, /* 속도·기어·시동 송신 끊기/잇기 (C4) */
-    IN_CUT_LUX = 1 << 10,    /* 조도 송신 끊기/잇기 (C2) */
-    IN_CUT_RAIN = 1 << 11,   /* 강우량 송신 끊기/잇기 (C2) */
-    IN_LIGHT_SW_CODE = 1 << 12, /* 조명 스위치를 코드(정수)로 직접: 정해진 값 밖도 그대로 넘김 */
-    IN_WIPER_SW_CODE = 1 << 13  /* 와이퍼 스위치를 코드(정수)로 직접 */
+    SIG_IGN = 1 << 0,
+    SIG_GEAR = 1 << 1,
+    SIG_SPEED = 1 << 2,
+    SIG_LUX = 1 << 3,
+    SIG_RAIN = 1 << 4,
+    SIG_DOORS = 1 << 5,
+    SIG_LIGHT_SW = 1 << 6,
+    SIG_WIPER_SW = 1 << 7,
+    SIG_WIPER_LEVEL = 1 << 8 /* 조명 콘솔 전용: L6에 넘길 와이퍼 단계 */
 };
 
 /* 바뀌면 알려 줄 출력 */
@@ -45,30 +45,36 @@ enum {
 typedef struct ModCon ModCon;
 
 struct ModCon {
-    const char *title;    /* 예: "도어·잠금 (D1~D3)" */
-    const char *about;    /* 시작할 때 보여 줄 한두 줄 설명 */
-    unsigned inputs;      /* IN_* 조합 */
-    unsigned outputs;     /* OUT_* 조합 */
-    void *mod;            /* 모듈 상태 (DoorState 등) */
-    void (*mod_init)(ModCon *m);   /* 모듈 상태 초기화 */
-    void (*mod_step)(ModCon *m);   /* m->ctx로 모듈 step을 불러 m->out을 채운다 */
+    /* 콘솔이 정하는 것 */
+    const char *title;
+    const char *about;
+    unsigned show;     /* SIG_* */
+    unsigned outputs;  /* OUT_* */
+    void (*mod_init)(ModCon *m);
+    void (*mod_step)(ModCon *m);
+    int32_t start_ign;  /* 시작값 (계기판·와이퍼는 유효한 속도 판정을 위해 시동·기어를 정해 둔다) */
+    int32_t start_gear;
 
-    /* 지금 보내고 있는 값 (사용자가 바꾼다) */
-    bool ign;
-    Gear gear;
-    int32_t speed;
-    int32_t lux;
-    int32_t rain;
-    unsigned cut;            /* 송신 중단 중인 신호 (CUT_*) */
-    WiperLevel wiper_level;  /* IN_WIPER_LEVEL: 조명에 넘길 와이퍼 단계 */
+    /* 지금 보내고 있는 원래 값 (코드 그대로) */
+    int32_t ign, gear, speed, lux, rain;
+    int32_t wiper_level;
+    unsigned cut;            /* 송신을 끊은 주기 신호 */
+    bool auto_send;          /* 주기 신호 자동 재송신 */
+    vbc_ms_t send_period_ms; /* 기본 50 (사양서 3.1: 0.5초보다 짧게) */
+    vbc_ms_t step_period_ms; /* 기본 1 (1ms마다 판단) */
 
     VbcInputs in;
     VbcContext ctx;
     VbcOutputs out;
     vbc_ms_t now;
+
+    /* 테스트 케이스 기록 */
+    char tc[48];
+    int tc_count, tc_failed, checks, failures, observations;
+    bool tc_has_fail;
 };
 
-/* 모든 값을 시작 상태로 두고 0초에 첫 입력을 보낸 뒤 대화형 메뉴를 돈다. 종료 코드를 돌려준다 */
+/* 시작 상태로 두고 0초에 첫 입력을 보낸 뒤 대화형으로 돈다. expect가 하나라도 틀리면 1을 돌려준다 */
 int modcon_run(ModCon *m);
 
 #endif /* MODCON_H */

@@ -5,6 +5,7 @@
 # make sim       → wasm 빌드 후 http://localhost:8080/sim/ (저장소 루트 서빙, SIM_PORT로 변경)
 # make consoles  → 모듈별 대화형 테스트 콘솔 4개 빌드 (build/con_doors 등)
 # make con-doors / con-dashboard / con-lighting / con-wipers → 해당 콘솔 실행
+# make tc        → 모듈별 TC 전체 실행, 결과 문서 docs/test/tc-results.md 생성
 # make clean
 
 CC ?= gcc
@@ -18,7 +19,7 @@ HEADERS := $(wildcard src/*.h)
 TEST_SRCS := $(wildcard tests/test_*.c)
 TEST_BINS := $(TEST_SRCS:tests/%.c=$(BUILD)/%)
 
-.PHONY: all test run scenarios wasm sim consoles clean
+.PHONY: all test run scenarios wasm sim consoles tc clean
 
 all: $(BUILD)/vbc
 
@@ -78,6 +79,10 @@ $(BUILD)/con_%: tools/consoles/con_%.c $(BUILD)/modcon.o $(LIB_OBJS) tools/conso
 
 con-%: $(BUILD)/con_%
 	./$<
+
+# 모듈별 TC 전체 실행 → docs/test/tc-results.md, docs/test/logs/*.log
+tc: consoles
+	python3 tools/consoles/tc/run_tc.py
 
 $(BUILD):
 	mkdir -p $@

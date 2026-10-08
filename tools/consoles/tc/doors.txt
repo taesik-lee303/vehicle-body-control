@@ -1,0 +1,141 @@
+# 도어·잠금 D1~D3 테스트 케이스 (make con-doors 로 실행되는 doors_step만 시험)
+# 형식: tc <ID> | <요구사항> | <기법> | <입력> | <기대(사양서에서 계산)>
+# 기대값은 사양서 VBC-SRS-001 v1.0 5.3, 4장(C3·C4). obs는 사양서에 정해지지 않은 동작을 관찰만 한 것.
+
+tc TC-D-C5-01 | C5 | 시작 상태 | 초기 상태 (시동 OFF, 기어 P) | 풀림
+e lock off
+
+tc TC-D3-01 | D3 | 경계값(속도 3-value) | 시동 ON, 기어 D, 속도 14 | 풀림 유지 (15 미만)
+ign on
+gear d
+speed 14
+e lock off
+tc TC-D3-02 | D3 | 경계값(속도 3-value) | 이어서 속도 15 | 그 시각에 잠김
+speed 15
+e lock on
+tc TC-D3-03 | D3 | 경계값(속도 3-value) | 처음부터 시동 ON, 기어 D, 속도 16 | 잠김
+r
+ign on
+gear d
+speed 16
+e lock on
+tc TC-D3-04 | D3 | 상태 전이(직전 유지) | 잠긴 뒤 속도 5로 감속, 2초 | 잠김 유지
+speed 5
+t 2
+e lock on
+tc TC-D3-05 | D3, C3 | 동치(무효: 250 초과) + 경계값 | 처음부터 시동 ON, D, 속도 251 | 풀림 (유효한 속도 아님)
+r
+ign on
+gear d
+speed 251
+e speedvalid no
+e lock off
+tc TC-D3-06 | D3, C3 | 동치(무효: 0 미만) | 속도 -1 | 풀림
+speed -1
+e speedvalid no
+e lock off
+tc TC-D3-07 | D3, C3 | 경계값(유효 상한) | 속도 250 | 잠김
+speed 250
+e lock on
+tc TC-D3-08 | D3 | 동치(기어 R) | 처음부터 시동 ON, 기어 R, 속도 15 | 잠김 (D3는 기어 조건 없음)
+r
+ign on
+gear r
+speed 15
+e lock on
+tc TC-D3-09 | D3 | 동치(기어 N) | 처음부터 시동 ON, 기어 N, 속도 15 | 잠김
+r
+ign on
+gear n
+speed 15
+e lock on
+
+tc TC-D2-01 | D2 | 결정 테이블(기어 P) | 잠긴 상태(N, 15)에서 기어 P | 풀림
+gear p
+e lock off
+tc TC-D2-02 | D2 | 결정 테이블(시동 OFF) | 처음부터 D, 30으로 잠근 뒤 시동 OFF | 풀림
+r
+ign on
+gear d
+speed 30
+e lock on
+ign off
+e lock off
+tc TC-D2-03 | D2 > D3 | 결정 테이블(우선순위) | 처음부터 시동 ON, 기어 P, 속도 30 | 풀림 (잠그지 않음)
+r
+ign on
+gear p
+speed 30
+e lock off
+
+tc TC-D1-01 | D1, C4 | 경계값(시간 3-value) | D, 30으로 잠근 뒤 속도 신호만 끊기, 0.499초 | 수신 중단 아님, 잠김
+r
+ign on
+gear d
+speed 30
+cut speed
+t 0.499
+e rxlost no
+e lock on
+tc TC-D1-02 | D1, C4 | 경계값(시간 3-value) | 이어서 +1ms (0.500초) | 수신 중단, 잠김 유지
+t 0.001
+e rxlost yes
+e lock on
+tc TC-D1-03 | D1, C4 | 경계값(시간 3-value) | 이어서 +1ms (0.501초) | 수신 중단, 잠김 유지
+t 0.001
+e rxlost yes
+e lock on
+tc TC-D1-04 | D1 > D2 | 결정 테이블(Negative) | 수신 중단 중 시동 OFF 값 수신 | 잠김 유지 (D1이 먼저)
+ign off
+e rxlost yes
+e lock on
+tc TC-D1-05 | D1 → D2 | 상태 전이(복귀) | 속도 송신 재개 | 수신 정상, 시동 OFF라 풀림
+resume speed
+e rxlost no
+e lock off
+tc TC-D1-06 | D1 | Negative(풀린 상태) | 처음부터 시동 ON, D, 속도 0에서 세 신호 모두 끊기 0.5초 | 풀림 유지
+r
+ign on
+gear d
+speed 0
+cut vehicle
+t 0.5
+e rxlost yes
+e lock off
+tc TC-D1-07 | D1 → D3 | 상태 전이(복귀) | 속도 30으로 바꾼 뒤 송신 재개 | 잠김
+speed 30
+resume vehicle
+e lock on
+
+tc TC-D-Q8-01 | (정의 없음) Q8 | Negative(기어 코드) | 시동 ON, 기어 코드 7, 속도 30 | 기어 코드 정의 안 됨 판정. 도어 동작은 관찰
+r
+ign on
+gear 7
+speed 30
+e gearvalid no
+obs lock
+tc TC-D-Q8-02 | (정의 없음) Q8 | Negative(기어 코드) | 잠긴 상태에서 기어 코드 7 유지, 정차(속도 0) | 관찰
+speed 0
+obs lock
+tc TC-D-Q8-03 | (정의 없음) Q8 | Negative(기어 코드) | 처음부터 시동 ON, 기어 코드 -1, 속도 30 | 관찰
+r
+ign on
+gear -1
+speed 30
+e gearvalid no
+obs lock
+tc TC-D-Q9-01 | (정의 없음) Q9 | Negative(시동 코드) | 기어 D, 시동 코드 2, 속도 30 | 시동 코드 정의 안 됨 판정. 동작은 관찰
+r
+gear d
+ign 2
+speed 30
+e ignvalid no
+obs ignon
+obs lock
+tc TC-D-Q9-02 | (정의 없음) Q9 | Negative(시동 코드) | 잠긴 뒤 정차, 시동 코드 -1 | 관찰
+speed 0
+ign -1
+e ignvalid no
+obs ignon
+obs lock
+q

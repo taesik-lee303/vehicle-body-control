@@ -1,0 +1,105 @@
+# 계기판 경고 D4·D5 테스트 케이스 (make con-dashboard 로 실행되는 dashboard_step만 시험)
+# 시작 상태: 시동 ON, 기어 D, 속도 0, 조도 30000, 강우 0, 문 모두 닫힘
+# 기대값은 사양서 5.3 D4·D5, 4장(C2·C3). obs는 사양서에 정해지지 않은 동작.
+
+tc TC-E-C5-01 | C5 | 시작 상태 | 초기 상태 | 경고 없음
+e warning none
+
+tc TC-D4-01 | D4 | 경계값(속도 3-value) | 문 FL 열림, 속도 0 | 경고 없음 (속도 > 0 아님)
+fl open
+e warning none
+tc TC-D4-02 | D4 | 경계값(속도 3-value) | 이어서 속도 1 | 주행 중 도어 열림
+speed 1
+e warning door
+tc TC-D4-03 | D4 | 경계값(속도 3-value) | 이어서 속도 2 | 주행 중 도어 열림
+speed 2
+e warning door
+tc TC-D4-04 | D4, C3 | 경계값(유효 상한) | 속도 250 | 주행 중 도어 열림
+speed 250
+e warning door
+tc TC-D4-05 | D4, C3 | 동치(무효: 250 초과) | 속도 251 | 경고 없음 (유효한 속도 아님)
+speed 251
+e speedvalid no
+e warning none
+tc TC-D4-06 | D4, C3 | 동치(무효: 0 미만) | 속도 -1 | 경고 없음
+speed -1
+e warning none
+tc TC-D4-07 | D4 | 동치(문 위치) | 속도 30, FL 닫고 RR만 열림 | 주행 중 도어 열림
+speed 30
+fl close
+rr open
+e warning door
+tc TC-D4-08 | D4 | 동치(문 모두 닫힘) | 속도 30, RR도 닫힘 | 경고 없음
+rr close
+e warning none
+tc TC-D4-09 | D4, C3 | 경계값(시간 3-value) | 속도 30, 문 FR 열림, 속도 신호만 끊고 0.499초 | 주행 중 도어 열림 (아직 유효)
+fr open
+cut speed
+t 0.499
+e warning door
+tc TC-D4-10 | D4, C3 | 경계값(시간 3-value) | 이어서 +1ms (0.500초) | 경고 없음 (유효한 속도 없음)
+t 0.001
+e speedvalid no
+e warning none
+tc TC-D4-11 | D4, C3 | 상태 전이(복귀) | 속도 송신 재개 | 주행 중 도어 열림
+resume speed
+e warning door
+
+tc TC-D5-01 | D5 | 결정 테이블(도어+조도+강우) | 처음부터 속도 30, 문 FL 열림, 조도 70000, 강우 101 | 주행 중 도어 열림
+r
+speed 30
+fl open
+lux 70000
+rain 101
+e warning door
+tc TC-D5-02 | D5 | 결정 테이블(조도+강우) | 이어서 문 닫힘 | 조도 센서 고장
+fl close
+e warning lux
+tc TC-D5-03 | D5 | 결정 테이블(강우만) | 이어서 조도 30000 | 강우 센서 고장
+lux 30000
+e warning rain
+tc TC-D5-04 | D5 | 결정 테이블(없음) | 이어서 강우 50 | 경고 없음
+rain 50
+e warning none
+tc TC-D5-05 | D5, C2 | 경계값(조도 범위) | 조도 60000 → 60001 → -1 | 없음 → 조도 고장 → 조도 고장
+lux 60000
+e warning none
+lux 60001
+e warning lux
+lux -1
+e warning lux
+tc TC-D5-06 | D5, C2 | 경계값(강우 범위) | 조도 30000, 강우 100 → 101 → -1 | 없음 → 강우 고장 → 강우 고장
+lux 30000
+rain 100
+e warning none
+rain 101
+e warning rain
+rain -1
+e warning rain
+tc TC-D5-07 | D5, C2 | 경계값(시간 3-value) | 강우 50, 조도 송신만 끊고 0.499 / 0.500초 | 없음 → 조도 고장
+rain 50
+cut lux
+t 0.499
+e warning none
+t 0.001
+e warning lux
+tc TC-D5-08 | D5 | 결정 테이블(시동 무관) | 이어서 시동 OFF | 조도 센서 고장 유지 (D5에 시동 조건 없음)
+ign off
+e warning lux
+
+tc TC-E-Q10-01 | (정의 없음) Q10 | Negative(도어 코드) | 처음부터 속도 30, 문 FL 코드 2 | 도어 코드 정의 안 됨 판정. 경고는 관찰
+r
+speed 30
+fl 2
+e doorvalid no
+obs warning
+tc TC-E-Q10-02 | (정의 없음) Q10 | Negative(도어 코드) | 문 FL 코드 -1 | 관찰
+fl -1
+e doorvalid no
+obs warning
+tc TC-E-Q8-01 | (정의 없음) Q8 | Negative(기어 코드) | 문 FL 열림(1), 속도 30, 기어 코드 7 | 관찰 (D4에는 기어 조건 없음)
+fl open
+gear 7
+e gearvalid no
+obs warning
+q

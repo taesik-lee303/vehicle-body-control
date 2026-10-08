@@ -1,11 +1,16 @@
-# 모듈별 테스트 콘솔
+# 모듈별 테스트 콘솔 (신호 주입기)
 
-사용법, 콘솔별 테스트 순서, 규격 밖 값 넣기, 예제 파일은 저장소 최상위 [README.md](../../README.md)에 있습니다.
+사용법, 원칙, TC 작성법, 발견 사항: [docs/test/README.md](../../docs/test/README.md)
+실행한 TC와 결과(자동 생성): [docs/test/tc-results.md](../../docs/test/tc-results.md)
 
 ```bash
-make con-doors       # 도어·잠금 D1~D3
-make con-dashboard   # 계기판 경고 D4·D5
-make con-lighting    # 조명 L1~L6
-make con-wipers      # 와이퍼 W1~W5
-./build/con_wipers < tools/consoles/examples/wipers.txt   # 예제 입력으로 한 번에
+make con-doors      # 대화형 (con-dashboard, con-lighting, con-wipers)
+make tc             # tc/*.txt 전체 실행 → 결과 문서 갱신
 ```
+
+| 파일 | 내용 |
+|---|---|
+| `modcon.c/h` | 신호 주입기 공통 틀: 명령, 송신, 1ms 시간 진행, 판정 표시, e/obs/tc |
+| `con_<모듈>.c` | 모듈별 콘솔 (메뉴에 보일 신호와 호출할 step 함수만 정의) |
+| `tc/<모듈>.txt` | 테스트 케이스 |
+| `tc/run_tc.py` | TC 실행·결과 문서 생성 (`make tc`) |

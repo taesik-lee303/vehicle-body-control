@@ -1,0 +1,155 @@
+# 와이퍼 W1~W5 테스트 케이스 (make con-wipers 로 실행되는 wipers_step만 시험)
+# 시작 상태: 시동 OFF, 기어 D, 속도 0, 강우 0, 와이퍼 스위치 OFF
+# 기대값은 사양서 5.2 W1~W5, 4장 C2·C3·C4, 팀 요구사항(SWR-W4-005, VBC_요구사항_통합본 5.2). obs는 정해지지 않은 동작.
+
+tc TC-W-C5-01 | C5 | 시작 상태 | 초기 상태 | 정지, 강우 고장 표시 꺼짐
+e wiper stop
+e rainlamp off
+
+tc TC-W1-01 | W1 > W4 | 결정 테이블 | 시동 OFF, 스위치 HIGH, 강우 80 | 정지
+wiper high
+rain 80
+e wiper stop
+tc TC-W4-01 | W4 | 결정 테이블 | 시동 ON (스위치 HIGH) | 고속
+ign on
+e wiper high
+tc TC-W4-02 | W4 | 결정 테이블 | 스위치 LOW | 저속
+wiper low
+e wiper low
+tc TC-W4-03 | W4 | 결정 테이블 | 스위치 OFF (강우 80) | 정지
+wiper off
+e wiper stop
+tc TC-W4-04 | W4 > W5 | 결정 테이블 | 스위치 HIGH, 강우 101 (고장) | 고속, 강우 고장 표시 켜짐
+wiper high
+rain 101
+e wiper high
+e rainlamp on
+
+tc TC-W2-01 | W2 | 경계값(10%: 9/10/11) | 처음부터 시동 ON, AUTO, 속도 30, 강우 9 → 10 → 11 | 정지 → 간헐 → 간헐
+r
+ign on
+wiper auto
+speed 30
+rain 9
+e wiper stop
+rain 10
+e wiper int
+rain 11
+e wiper int
+tc TC-W2-02 | W2 | 경계값(40%: 39/40/41) | 강우 39 → 40 → 41 | 간헐 → 저속 → 저속
+rain 39
+e wiper int
+rain 40
+e wiper low
+rain 41
+e wiper low
+tc TC-W2-03 | W2 | 경계값(70%: 69/70/71) | 강우 69 → 70 → 71 | 저속 → 고속 → 고속
+rain 69
+e wiper low
+rain 70
+e wiper high
+rain 71
+e wiper high
+tc TC-W2-04 | W2, C2 | 경계값(유효 범위 0/100) | 강우 0 → 100 | 정지 → 고속
+rain 0
+e wiper stop
+rain 100
+e wiper high
+
+tc TC-W3-01 | W3 | 결정 테이블(구간별 한 단계 낮춤) | 속도 0, 강우 70 → 40 → 10 → 9 | 저속 → 간헐 → 정지 → 정지
+speed 0
+rain 70
+e wiper low
+rain 40
+e wiper int
+rain 10
+e wiper stop
+rain 9
+e wiper stop
+tc TC-W3-02 | W3, C3 | 경계값(속도 0/1) | 강우 50, 속도 1 → 0 | 저속 → 간헐
+rain 50
+speed 1
+e wiper low
+speed 0
+e wiper int
+tc TC-W3-03 | W3, C3 | 동치(무효 속도는 0이 아님) | 강우 50, 속도 -1 → 251 | 저속 (유효한 속도가 없어 W3 아님)
+speed -1
+e speedvalid no
+e wiper low
+speed 251
+e wiper low
+tc TC-W3-04 | W3, C3 | 경계값(시간 3-value) | 속도 0, 강우 50, 속도 신호만 끊고 0.499 / 0.500초 | 간헐 → 정지 (수신 중단 → W1)
+speed 0
+cut speed
+t 0.499
+e wiper int
+t 0.001
+e rxlost yes
+e wiper stop
+
+tc TC-W5-01 | W5 | 동치(무효: 위) | 처음부터 시동 ON, AUTO, 속도 30, 강우 101 | 간헐, 고장 표시
+r
+ign on
+wiper auto
+speed 30
+rain 101
+e wiper int
+e rainlamp on
+tc TC-W5-02 | W5 > W3 | 결정 테이블 | 이어서 속도 0 | 간헐 유지 (낮추지 않음)
+speed 0
+e wiper int
+tc TC-W5-03 | W5, C2 | 동치(무효: 아래) | 강우 -1 | 간헐, 고장 표시
+rain -1
+e wiper int
+e rainlamp on
+tc TC-W5-04 | W5, C2 | 경계값(시간 3-value) | 강우 50, 강우 송신만 끊고 0.499 / 0.500초 | 표시 꺼짐 → 켜짐, 간헐
+rain 50
+cut rain
+t 0.499
+e rainlamp off
+t 0.001
+e rainlamp on
+e wiper int
+tc TC-W5-05 | W5, W1 | 결정 테이블(표시는 시동 무관) | 이어서 시동 OFF | 정지, 고장 표시 유지
+ign off
+e wiper stop
+e rainlamp on
+tc TC-W5-06 | W5 | 결정 테이블(표시는 스위치 무관) | 시동 ON, 스위치 OFF | 정지, 고장 표시 유지
+ign on
+wiper off
+e wiper stop
+e rainlamp on
+
+tc TC-W-C4-01 | W1, C4 | 경계값(시간 3-value) | 처음부터 시동 ON, HIGH, 세 신호 끊고 0.499 / 0.500초 | 고속 → 정지
+r
+ign on
+wiper high
+cut vehicle
+t 0.499
+e wiper high
+t 0.001
+e wiper stop
+
+tc TC-W-SWR-01 | SWR-W4-005 (팀 요구사항) | Negative(스위치 코드) | 처음부터 시동 ON, AUTO, 속도 30, 강우 50 → 스위치 코드 7, -1 | 저속 유지 (마지막 정상 값 AUTO)
+r
+ign on
+wiper auto
+speed 30
+rain 50
+wiper 7
+e wipervalid no
+e wiper low
+wiper -1
+e wiper low
+tc TC-W-SWR-02 | SWR-W4-005 (팀 요구사항) | Negative(스위치 코드) | 스위치 HIGH → 코드 99, 강우 0 | 고속 유지 (마지막 정상 값 HIGH)
+wiper high
+wiper 99
+rain 0
+e wiper high
+tc TC-W-Q9-01 | (정의 없음) Q9 | Negative(시동 코드) | 처음부터 스위치 HIGH, 시동 코드 2 | 관찰
+r
+wiper high
+ign 2
+e ignvalid no
+obs wiper
+q
