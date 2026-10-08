@@ -23,9 +23,9 @@ URL `?car=code`는 항상 코드 모델, `?car=glb`는 glb가 없을 때 이벤�
 **노드 이름 규칙** (대소문자, `_`·`-`·공백 구분 상관없음)
 | 부품 | 이름 예 | 없으면 |
 |---|---|---|
-| 도어 4개 | `door_fl`, `door_fr`, `door_rl`, `door_rr` 또는 `Door Front Left` | 그 도어는 열림이 보이지 않음 (계기판에는 표시됨) |
-| 바퀴 4개 | `wheel_fl` … `wheel_rr` | 그 바퀴는 돌지 않음 |
-| 전조등 | 노드나 재질 이름에 `headlight`, `headlamp`, `projector` | 빛(스포트라이트)만 나감 |
+| 도어 4개 | `door_fl`, `door_fr`, `door_rl`, `door_rr`, `door_lf`(좌우 먼저) 또는 `Door Front Left` | 그 도어는 열림이 보이지 않음 (계기판에는 표시됨) |
+| 바퀴 4개 | `wheel_fl` … `wheel_rr` | 합쳐진 타이어·휠 메시(`tyres`, `tires`, `rims`, `wheels`)가 있으면 차 가운데 기준 네 구역으로 나눠 돌림. 그것도 없으면 돌지 않음 |
+| 전조등 | 노드나 재질 이름에 `headlight`, `headlamp`, `frontlight`, `projector` | 빛(스포트라이트)만 나감 |
 | 후미등·브레이크등 | `taillight`, `taillamp`, `rearlight`, `brakelight`, `stoplamp` | 표시 안 됨 |
 | 후진등 | `reverse`, `backup` | 표시 안 됨 |
 | 와이퍼 | 이름에 `wiper` | 모델의 와이퍼는 숨기고 같은 규칙의 와이퍼를 붙임 (위치는 `car.json`) |
@@ -47,4 +47,4 @@ URL `?car=code`는 항상 코드 모델, `?car=glb`는 glb가 없을 때 이벤�
 ## 출처 (CC-BY 모델을 넣으면 여기에 추가)
 | 파일 | 작성자 | 링크 | 라이선스 |
 |---|---|---|---|
-| (없음) | | | |
+| `car.glb` | CCamo ([nicocarmo05](https://sketchfab.com/nicocarmo05)) | [(Game Ready / PBR) Porsche Cayenne Turbo 2005](https://sketchfab.com/3d-models/game-ready-pbr-porsche-cayenne-turbo-2005-0c21727cc75e4ecbb39c4eb5c78991ad) | CC-BY 4.0 |

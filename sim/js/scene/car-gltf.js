@@ -7,14 +7,15 @@ import { DOOR_OPEN_RAD, makeWiperAnimator, makeBeams, buildWiper, makeContactSha
 
 const LENGTH = 4.6;
 const WIPER_SWEEP_RAD = THREE.MathUtils.degToRad(95);
-const CORNER = { fl: 0, fr: 1, rl: 2, rr: 3 };
+// 앞뒤+좌우(fl) 순서와 좌우+앞뒤(lf, GTA식) 순서를 모두 받는다. rr은 어느 쪽이든 뒤 오른쪽
+const CORNER = { fl: 0, fr: 1, rl: 2, rr: 3, lf: 0, rf: 1, lr: 2 };
 const norm = (s) => (s || '').toLowerCase().replace(/[^a-z0-9]+/g, '_');
 
-// 'door_fl', 'FL_Door', 'Door Front Left' → 0..3, 아니면 -1
+// 'door_fl', 'door_lf', 'FL_Door', 'Door Front Left' → 0..3, 아니면 -1
 function cornerOf(name, kind) {
   const n = norm(name);
   if (!n.includes(kind)) return -1;
-  const m = n.match(/(?:^|_)(fl|fr|rl|rr)(?:_|$)/);
+  const m = n.match(/(?:^|_)(fl|fr|rl|rr|lf|rf|lr)(?:_|$)/);
   if (m) return CORNER[m[1]];
   const f = /front/.test(n) ? 'f' : /rear|back/.test(n) ? 'r' : '';
   const s = /left/.test(n) ? 'l' : /right/.test(n) ? 'r' : '';
@@ -23,6 +24,37 @@ function cornerOf(name, kind) {
 const matches = (o, re) => re.test(norm(o.name)) || [].concat(o.material || []).some((m) => re.test(norm(m.name)));
 
 function boxOf(obj) { return new THREE.Box3().setFromObject(obj); }
+
+// 바퀴 4개가 한 메시로 합쳐진 모델(TYRES, RIMS 등): 삼각형을 차 가운데 기준 네 구역으로 나눠 구역마다 그룹을 만든다.
+// 나눈 메시는 그 구역의 정점만 가진다 (경계 상자로 회전축을 잡으므로). 비어 있는 구역은 그룹을 만들지 않는다
+function splitWheels(root, meshes) {
+  const groups = [];
+  const v = new THREE.Vector3(), c = new THREE.Vector3();
+  for (const o of meshes) {
+    const g = o.geometry, pos = g.attributes.position;
+    const idx = g.index ? g.index.array : Array.from({ length: pos.count }, (_, i) => i);
+    const parts = [[], [], [], []];
+    for (let t = 0; t + 2 < idx.length; t += 3) {
+      c.set(0, 0, 0);
+      for (let k = 0; k < 3; k++) c.add(v.fromBufferAttribute(pos, idx[t + k]).applyMatrix4(o.matrixWorld));
+      parts[(c.z < 0 ? 0 : 2) + (c.x < 0 ? 0 : 1)].push(idx[t], idx[t + 1], idx[t + 2]);   // fl fr rl rr
+    }
+    parts.forEach((p, i) => {
+      if (!p.length) return;
+      const sub = new THREE.BufferGeometry();
+      for (const [name, attr] of Object.entries(g.attributes)) sub.setAttribute(name, attr);
+      sub.setIndex(p);
+      const part = new THREE.Mesh(sub.toNonIndexed(), o.material);
+      part.name = `${o.name}_${['fl', 'fr', 'rl', 'rr'][i]}`;
+      part.castShadow = true; part.receiveShadow = true;
+      if (!groups[i]) { groups[i] = new THREE.Group(); root.add(groups[i]); }
+      part.applyMatrix4(o.matrixWorld);   // root는 원점이라 matrixWorld가 곧 root 좌표
+      groups[i].add(part);
+    });
+    o.removeFromParent();
+  }
+  return groups;
+}
 
 function pivotAt(root, obj, point) {
   const p = new THREE.Group();
@@ -70,10 +102,18 @@ export async function loadGltfCar(base = 'assets/') {
     if (w >= 0 && !wheels[w]) { wheels[w] = o; picked.add(o); return; }
     if (/wiper/.test(norm(o.name))) { oldWipers.push(o); picked.add(o); }
   });
+  // 이름으로 4개를 다 못 찾으면, 합쳐진 타이어·휠 메시(tyres, rims ...)를 네 구역으로 나눈다
+  if (wheels.filter(Boolean).length < 4) {
+    const merged = [];
+    gltf.scene.traverse((o) => {
+      if (o.isMesh && !underPicked(o) && /(^|_)(tyres?|tires?|rims?|wheels)(_|$)/.test(norm(o.name))) merged.push(o);
+    });
+    splitWheels(root, merged).forEach((g, i) => { if (g && !wheels[i]) wheels[i] = g; });
+  }
   gltf.scene.traverse((o) => {
     if (!o.isMesh) return;
     o.castShadow = true; o.receiveShadow = true;
-    const kind = matches(o, /head_?light|head_?lamp|projector/) ? heads : matches(o, /reverse|backup/) ? revs
+    const kind = matches(o, /head_?light|head_?lamp|front_?light|projector/) ? heads : matches(o, /reverse|backup/) ? revs
       : matches(o, /tail_?light|tail_?lamp|rear_?light|brake_?light|stop_?lamp/) ? tails : null;
     if (kind) { o.material = Array.isArray(o.material) ? o.material.map((m) => m.clone()) : o.material.clone(); kind.push(o); }
   });
