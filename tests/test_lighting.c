@@ -563,6 +563,20 @@ TEST(l6_counts_only_while_ignition_on)
     CHECK_EQ(r.out.headlight_on, true);
 }
 
+/* ---- 스위치 입력: OFF·AUTO·ON 외의 값은 받지 않는다 ---- */
+
+TEST(light_switch_ignores_values_other_than_off_auto_on)
+{
+    Sim s;
+    sim_init(&s);
+    vbc_set_light_switch(&s.sys.in, LIGHT_SW_ON);
+    vbc_set_light_switch(&s.sys.in, (LightSwitch)99);
+    vbc_set_light_switch(&s.sys.in, (LightSwitch)-1);
+    CHECK_EQ(s.sys.in.light_sw, LIGHT_SW_ON);
+    sim_run_until(&s, 1000);
+    CHECK_EQ(s.sys.out.headlight_on, true);
+}
+
 int main(void)
 {
     printf("== L 조명\n");
@@ -598,5 +612,6 @@ int main(void)
     RUN(l6_c1_counts_in_higher_rule_then_l3_already_satisfied);
     RUN(l6_does_not_apply_for_switch_off_or_on);
     RUN(l6_counts_only_while_ignition_on);
+    RUN(light_switch_ignores_values_other_than_off_auto_on);
     return test_summary();
 }
