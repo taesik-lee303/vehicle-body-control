@@ -13,7 +13,7 @@ function isTyping(el) {
   return el.tagName === 'INPUT' && ['text', 'number', 'search'].includes(el.type);
 }
 
-export function setupInput({ exec, sendQuiet, getState, actions }) {
+export function setupInput({ exec, sendQuiet, getState, actions, getAdas = () => null }) {
   const keys = new Set();
   let lastPedal = '';
   let forceBrake = false;   // 건물에 부딪혔을 때: 멈출 때까지 가속을 무시하고 브레이크를 밟은 것으로
@@ -51,6 +51,13 @@ export function setupInput({ exec, sendQuiet, getState, actions }) {
     else if (k === 'c') actions.nextCamera();
     else if (k === 'tab') actions.toggleToolbox();
     else if (k === 'h') actions.toggleHelp();
+    // Stop & Go (요구사항 2.2 운전자 입력)
+    else if (k === 'g') { const a = getAdas(); exec(`sg ${a && a.sg.sw ? 'off' : 'on'}`); }
+    else if (k === 's') exec('sg set');
+    else if (k === 'f') exec('sg res');
+    else if (k === 'v') { const a = getAdas(); exec(`sg gap ${a ? (a.sg.gap % 3) + 1 : 2}`); }
+    else if (e.key === '-') exec('sg down');
+    else if (e.key === '=' || e.key === '+') exec('sg up');
   });
 
   addEventListener('keyup', (e) => { keys.delete(e.key); updatePedal(); });

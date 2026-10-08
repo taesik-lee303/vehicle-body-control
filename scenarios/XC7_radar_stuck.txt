@@ -1,0 +1,19 @@
+# 값 고착 (XC7): 카운터는 늘지만 검출점이 1초 동안 그대로면 고장
+adas on
+drive on
+ign on
+gear d
+obj add car 25 0 30          # 앞차 #1: 25 m 앞, 30 km/h
+pedal 1 0
+wait 3
+pedal 0 0
+sg on
+sg set
+expect sg active
+wait 5                       # 8.000초 프레임이 고정된다
+radar fr stuck
+wait 0.95
+expect fr ok                 # 0.95초
+wait 0.05
+expect fr fault              # 1.00초
+expect sg standby

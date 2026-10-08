@@ -1,0 +1,21 @@
+# 운전자 개입 (XS10): 브레이크를 밟으면 그 주기에 대기로, 요청 없음
+adas on
+drive on
+ign on
+gear d
+obj add car 25 0 30          # 앞차 #1: 25 m 앞, 30 km/h
+pedal 1 0
+wait 3
+pedal 0 0
+sg on
+sg set
+expect sg active
+wait 4
+pedal 0 1
+wait 0.05
+expect sg standby
+pedal 0 0
+wait 1
+expect sg standby            # 다시 켜려면 SET/RES
+sg res
+expect sg active

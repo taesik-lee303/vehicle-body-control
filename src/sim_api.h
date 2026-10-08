@@ -21,4 +21,11 @@ void sim_advance(unsigned ms);
 /* 현재 입력·판정·출력을 JSON 한 줄로. 다음 호출 전까지 유효 */
 const char *sim_state(void);
 
+/* 레이더·Stop & Go (exp/radar-stop-and-go): Stop & Go, 맵 상태, 트랙, 세계 물체(시뮬레이터 정답)를 JSON으로 */
+const char *sim_adas(void);
+
+/* 맵이 차량 좌표로 바꾼 검출점. 점마다 float 6개: 센서, x, y, z, 도플러, 표시(1 정지 점, 2 노면 점) */
+const float *sim_points(void);
+int sim_points_count(void);
+
 #endif /* SIM_API_H */

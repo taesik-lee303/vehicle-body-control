@@ -8,6 +8,7 @@
 CC ?= gcc
 CFLAGS ?= -std=c11 -Wall -Wextra -Wpedantic -g
 CPPFLAGS += -Isrc
+LDLIBS += -lm
 BUILD := build
 
 LIB_SRCS := $(filter-out src/main.c,$(wildcard src/*.c))
@@ -24,13 +25,13 @@ run: $(BUILD)/vbc
 	./$(BUILD)/vbc
 
 $(BUILD)/vbc: $(LIB_OBJS) $(BUILD)/main.o
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS)
 
 $(BUILD)/%.o: src/%.c $(HEADERS) | $(BUILD)
 	$(CC) $(CPPFLAGS) $(CFLAGS) -c -o $@ $<
 
 $(BUILD)/test_%: tests/test_%.c $(LIB_OBJS) $(wildcard tests/*.h) | $(BUILD)
-	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(LIB_OBJS)
+	$(CC) $(CPPFLAGS) $(CFLAGS) -o $@ $< $(LIB_OBJS) $(LDLIBS)
 
 test: $(TEST_BINS)
 	@fail=0; for t in $(TEST_BINS); do ./$$t || fail=1; done; \
@@ -46,8 +47,8 @@ scenarios: $(BUILD)/vbc
 SIM_OUT := sim/build/vbc.js
 EMCC ?= emcc
 EMFLAGS := -O2 -sMODULARIZE -sEXPORT_ES6 -sSINGLE_FILE -sENVIRONMENT=web \
-	-sEXPORTED_FUNCTIONS=_sim_init,_sim_exec,_sim_advance,_sim_state \
-	-sEXPORTED_RUNTIME_METHODS=cwrap,UTF8ToString
+	-sEXPORTED_FUNCTIONS=_sim_init,_sim_exec,_sim_advance,_sim_state,_sim_adas,_sim_points,_sim_points_count \
+	-sEXPORTED_RUNTIME_METHODS=cwrap,UTF8ToString,HEAPF32
 
 wasm: $(SIM_OUT)
 

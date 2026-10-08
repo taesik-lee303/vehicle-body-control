@@ -12,6 +12,8 @@ import { loadGltfCar } from './car-gltf.js';
 import { createSky } from './sky.js';
 import { createRoad } from './road.js';
 import { createCity } from './city.js';
+import { createTraffic } from './traffic.js';
+import { createRadarView } from './radar-view.js';
 
 const LUX_MAX = 60000;
 const LANE_SWAY = 1.0;         // ←→로 움직일 수 있는 폭
@@ -64,6 +66,8 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
   const road = city ? null : createRoad(scene);
   const LANE_X = road ? road.laneX : 0;
   if (city) log(`지도: ${map.name}, 한 바퀴 ${(city.path.length / 1000).toFixed(2)} km (도로 ${city.counts.roads}, 건물 ${city.counts.buildings}, 나무 ${city.counts.trees}, 가로등 ${city.counts.lamps})`, 'info');
+  const traffic = createTraffic(scene);     // 시뮬레이터 세계의 차·보행자·육교 (정답)
+  const radarView = createRadarView(scene); // 레이더가 본 것 (맵의 검출점·트랙)
 
   // ---- 비: 짧은 선분. 강우량에 비례해 그리는 개수만 바꾼다 ----
   const dropPos = new Float32Array(MAX_DROPS * 6), dropCol = new Float32Array(MAX_DROPS * 6);
@@ -173,8 +177,30 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
   }
   resetPose();
 
-  // opts.manual: 직접 운전(주행 모드, 시나리오 재생 아님)이면 true. 돌려주는 값: 이번 프레임에 막힌 이유('building'·'edge') 또는 null
+  // ---- 도로를 편 좌표 → 화면 좌표 (레이더·교통 물체용) ----
+  // C 코어의 세계·레이더·맵은 도로를 편 좌표(x 앞 = 경로를 따라 잰 거리, y 왼쪽, z 위)에서 계산한다 (요구사항 1.1 직진 가정).
+  // 지도 자동 주행이면 그 좌표를 경로를 따라 휘어 놓고, 직선 도로·직접 운전이면 차 앞 직선으로 놓는다.
+  // 원점은 자차 앞 범퍼 (차 가운데에서 FRONT m 앞)
+  const FRONT = 2.3;
+  function mapPoint(x, y, z, out) {
+    if (city && !manual) {
+      const p = city.path.sample(dist + FRONT + x), c = Math.cos(p.heading), sn = Math.sin(p.heading);
+      const wx = p.x - c * y, wz = p.z + sn * y;   // 경로 오른쪽 = (cos, -sin) 이므로 왼쪽 y는 반대
+      return out.set(wx, city.heightAt(wx, wz) + ROAD_LIFT + z, wz);
+    }
+    const c = Math.cos(heading), sn = Math.sin(heading), f = FRONT + x;   // 앞 = (-sin, -cos), 왼쪽 = (-cos, sin)
+    return out.set(rigPos.x - sn * f - c * y, (city ? rigPos.y : 0) + z, rigPos.z - c * f + sn * y);
+  }
+  const mapHeading = (x) => (city && !manual ? city.path.sample(dist + FRONT + x).heading : heading);
+  const mapper = { point: mapPoint, heading: mapHeading, egoHeading: () => heading };
+
+  // opts.manual: 직접 운전(주행 모드, 시나리오 재생 아님)이면 true. opts.adas/pts: 레이더·Stop & Go 상태와 검출점.
+  // 돌려주는 값: 이번 프레임에 막힌 이유('building'·'edge') 또는 null
   function update(s, dt, lateral, opts = {}) {
+    const adas = opts.adas && opts.adas.on ? opts.adas : null;
+    // 레이더 장면(물체가 있거나 Stop & Go가 켜짐)에서는 경로를 따라가고 차로 가운데에 둔다 (맵의 자차 위치와 맞춤)
+    const radarScene = !!(adas && (adas.objs.length || adas.sg.state !== 'off'));
+    if (radarScene) { lateral = 0; side = 0; }
     clock += dt;
     const speedMs = s.in.speed_mkmh / 1000 / 3.6;
     const dir = s.in.gear === 'R' ? -1 : 1;            // 속도는 방향 없는 속력, 후진은 기어 R로 구분
@@ -200,7 +226,7 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
     bloom.strength = 0.15 + 0.35 * dark;
 
     let moved = dz, blocked = null;
-    const wantManual = !!(city && opts.manual);
+    const wantManual = !!(city && opts.manual && !radarScene);
     if (city && wantManual !== manual) {
       manual = wantManual;
       steerAng = 0;
@@ -281,6 +307,8 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
     // 앞바퀴 (car.update의 조향 값 1 ≈ 0.22 rad, +가 오른쪽): 직접 운전은 핸들 각, 자동은 경로가 휘는 만큼 + ←→
     const steer = manual ? -steerAng / 0.22 : (speedMs > 0.3 ? lateral : 0) - Math.atan(WHEELBASE * curvature) / 0.22;
     car.update(s, dt, speedMs, dir, THREE.MathUtils.clamp(steer, -2.6, 2.6), wet);
+    traffic.update(adas ? adas.objs : [], dark, mapper);
+    radarView.update(adas, opts.pts, mapper);
     placeCamera(dt, rigPos, heading, speedMs * 3.6);
     if (QUALITY[q].bloom) composer.render(); else renderer.render(scene, camera);
     return blocked;
@@ -299,5 +327,6 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
     map: city ? { path: city.path, data: map } : null,
     setQuality: (name) => { if (QUALITY[name]) { q = name; applyQuality(); } return QUALITY[q].label; },
     quality: () => q,
+    radarShow: radarView.show,
   };
 }

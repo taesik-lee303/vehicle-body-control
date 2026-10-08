@@ -103,3 +103,37 @@ select { background: #0b0d12; border: 1px solid var(--line); border-radius: 4px;
   #minimap { top: 12px; padding: 4px 6px; }       /* 좁은 화면: 그림은 빼고 도로 이름·출처만 */
   #minimap canvas { display: none; }
 }
+
+/* ---- 레이더·Stop & Go (exp/radar-stop-and-go) ---- */
+body.adas #log-panel { height: 28vh; }
+#radar-panel { position: fixed; right: 12px; top: calc(28vh + 24px); bottom: 150px; width: 360px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); display: flex; flex-direction: column;
+  backdrop-filter: blur(6px); }
+#radar-panel[hidden] { display: none; }
+#radar-panel header { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; padding: 6px 10px; border-bottom: 1px solid var(--line); }
+#radar-panel canvas { flex: 1; width: 100%; min-height: 0; cursor: pointer; display: block; }
+#radar-panel .foot { color: var(--dim); font-size: 11px; padding: 4px 10px 6px; border-top: 1px solid var(--line); }
+.chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.chip { font-size: 11px; border: 1px solid var(--line); border-radius: 10px; padding: 1px 7px; color: var(--dim); }
+.chip b { color: var(--c, var(--text)); }
+.chip.ok { color: var(--ok); } .chip.bad { color: var(--bad); border-color: var(--bad); } .chip.warn { color: var(--warn); }
+.chip i { color: var(--warn); font-style: normal; }
+.mini { color: var(--dim); font-size: 11px; align-self: center; margin-right: 2px; }
+.radar-faults { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font-size: 12px; }
+.radar-faults select { width: 100%; }
+#sg-state.active, #sg-state.hold, #sg-state.wait { color: var(--ok); font-weight: 700; }
+#sg-sw.active { background: var(--ok); border-color: var(--ok); color: #0b0d12; }
+.sg { grid-column: 2 / 3; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; border-top: 1px solid var(--line); padding-top: 6px; }
+.sg-name { color: var(--dim); font-size: 12px; }
+.sg-state { font-weight: 700; }
+.sg.active .sg-state, .sg.hold .sg-state { color: var(--ok); }
+.sg.wait .sg-state { color: var(--warn); }
+.sg.off .sg-state { color: var(--dim); font-weight: 400; }
+.sg-set { font-variant-numeric: tabular-nums; }
+.sg-gap { display: inline-flex; gap: 2px; } .sg-gap i { width: 12px; height: 6px; background: #333a46; border-radius: 1px; }
+.sg-gap i.on { background: var(--ok); }
+.sg-lead { color: var(--dim); font-variant-numeric: tabular-nums; } .sg-lead.on { color: var(--on); }
+.sg-accel { color: var(--dim); font-variant-numeric: tabular-nums; min-width: 80px; }
+.sg-alert { font-weight: 700; } .sg-alert.bad { color: var(--bad); } .sg-alert.warn { color: var(--warn); } .sg-alert.go { color: var(--ok); }
+body.adas #minimap { top: calc(28vh + 24px); right: 384px; }   /* 레이더 모드: 전방 맵 패널 왼쪽 */
+@media (max-width: 900px) { #radar-panel { display: none; } body.adas #minimap { right: 12px; } }

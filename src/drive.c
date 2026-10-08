@@ -23,6 +23,16 @@ void drive_init(Drive *d)
     d->ignition = false;
     d->throttle = THROTTLE_NONE;
     d->brake = false;
+    d->req_on = false;
+    d->req_mmps2 = 0;
+    d->req_hold = false;
+}
+
+void drive_set_request(Drive *d, bool accel_on, int32_t accel_mmps2, bool hold)
+{
+    d->req_on = accel_on;
+    d->req_mmps2 = accel_mmps2;
+    d->req_hold = hold;
 }
 
 void drive_set_pedals(Drive *d, Throttle throttle, bool brake)
@@ -62,6 +72,11 @@ void drive_step(Drive *d, vbc_ms_t dt_ms)
         v -= delta_mkmh(DRIVE_BRAKE, dt_ms); /* R4: 브레이크 우선 */
     } else if (d->throttle != THROTTLE_NONE && can_move) {
         v += delta_mkmh(d->throttle == THROTTLE_FULL ? DRIVE_ACCEL_FULL : DRIVE_ACCEL_NORMAL, dt_ms);
+    } else if (d->req_hold) {
+        v -= delta_mkmh(DRIVE_BRAKE, dt_ms); /* XR2: 정지 유지 (0에서 멈춘다) */
+    } else if (d->req_on && can_move) {
+        /* XR1: m/s² → km/h per s = ×3.6. mm/s² × ms × 3.6 / 1000 = 1/1000 km/h */
+        v += (int32_t)(((int64_t)d->req_mmps2 * (int64_t)dt_ms * 36) / 10000);
     } else {
         v -= delta_mkmh(DRIVE_COAST, dt_ms); /* R4: 가속도 브레이크도 없음. P·N 가속도 여기 (R3) */
     }

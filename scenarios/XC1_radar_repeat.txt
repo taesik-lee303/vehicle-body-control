@@ -1,0 +1,19 @@
+# 프레임 반복 (XC1): 같은 카운터의 프레임은 새 프레임이 아니다. 계속 들어와도 0.2초 뒤 고장
+adas on
+drive on
+ign on
+gear d
+obj add car 25 0 30          # 앞차 #1: 25 m 앞, 30 km/h
+pedal 1 0
+wait 3
+pedal 0 0
+sg on
+sg set
+expect sg active
+wait 5
+radar fr repeat
+wait 0.15
+expect fr ok
+wait 0.05
+expect fr fault
+expect sg standby

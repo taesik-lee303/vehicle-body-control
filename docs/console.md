@@ -86,3 +86,28 @@ expect headlight on     # 3.000초
 ## 다음 단계 (계획)
 - 실시간 모드: 실제 시계로 0.05초마다 `console_advance()`를 부르고, 명령은 기다리지 않고 받기
 - 그래픽 화면(도로·차량): 화면에서 `console_exec()` / `console_advance()`를 부르면 코어와 모듈은 그대로 쓴다
+
+## 레이더·Stop & Go (실험 브랜치 `exp/radar-stop-and-go`)
+설계와 요구사항 ID는 `docs/radar-stop-and-go.md`. `adas on`을 켜야 동작하고, `obj`·`radar`·`sg`를 쓰면 자동으로 켜진다.
+
+| 명령 | 설명 |
+|---|---|
+| `adas on\|off` | 레이더 센서 모델·전방 맵·Stop & Go |
+| `adas rail on\|off` | 센서 모델의 오른쪽 가드레일 반사 (실제 지도 모드에서는 화면이 끔) |
+| `obj add <종류> <앞 m> <y m> [km/h]` | 물체 추가. 종류 `car truck ped bridge sign manhole`. 앞 = 자차 앞 범퍼에서 물체의 가까운 면까지, y = 내 차로 가운데 기준 왼쪽 + (오른쪽 차로 −3.6, 반대 차로 +3.6) |
+| `obj <번호> speed <km/h> [m/s²]` | 목표 속도와 가감속 (기본 2) |
+| `obj <번호> lane <y m> [m/s]` | 가로 이동: 차로 변경·횡단 (기본 1) |
+| `obj <번호> del`, `obj clear`, `obj list` | |
+| `radar fr\|fcl\|fcr\|all ok\|cut\|repeat\|stuck\|block` | 고장 주입: 끊김, 프레임 반복(카운터째), 값 고착(카운터만 늘어남), 가림 |
+| `sg on\|off\|set\|res\|up\|down`, `sg gap 1\|2\|3` | Stop & Go 스위치, SET, RES, 설정 속도 ±10, 차간 1.0/1.5/2.0 s |
+| `tracks [all]` | 맵의 확정 트랙 (all: 확정 전 포함) |
+
+| expect 항목 | 값 |
+|---|---|
+| `sg` | off / standby / active / hold / wait |
+| `sgalert` | none / takeover / radar / go |
+| `map` | none / reduced / ok |
+| `fr`, `fcl`, `fcr` | unknown / ok / fault |
+| `lead`, `hold`, `moving` | on / off |
+| `gap <최소> <최대>` | 내 차로 앞 물체까지 실제 거리 m (시뮬레이터 정답) |
+| `leadx <최소> <최대>` | 맵이 고른 선행 차량까지 거리 m |

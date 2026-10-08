@@ -7,6 +7,7 @@ import { renderHud } from './hud.js';
 import { ScenarioRunner, listScenarios } from './scenario.js';
 import { createWorld } from './scene/world.js';
 import { setupMinimap } from './minimap.js';
+import { createRadarPanel } from './radar-panel.js';
 
 const RATES = [0.25, 0.5, 1, 2];
 const TICK_MS = 50;
@@ -46,14 +47,20 @@ try {
 core.onLog((line) => log(line));
 
 const sim = { paused: false, rate: 1, carry: 0 };
-let state;
+let state, adas = null;
 let crash = null;   // 건물·지도 끝에 막혀 브레이크를 걸고 있는 중이면 그 이유
 
 function exec(cmd) { log('> ' + cmd, 'cmd'); return core.exec(cmd); }
 function sendQuiet(cmd) { return core.exec(cmd); }   // 페달·슬라이더 드래그처럼 자주 바뀌는 것은 로그에 남기지 않음
+// 레이더 센서 모델·전방 맵·Stop & Go를 켠다. 실제 지도에는 가드레일이 없으므로 센서 모델의 가드레일 반사를 끈다
+function adasOn() {
+  sendQuiet('adas on');
+  if (mapData) sendQuiet('adas rail off');
+}
 
 const scenario = new ScenarioRunner(core, log, () => {
   if (document.getElementById('drive').checked) sendQuiet('drive on');   // 시나리오가 끝나면 다시 운전 가능하게
+  adasOn();
   input.resync();
 });
 
@@ -80,6 +87,7 @@ const actions = {
     crash = null;
     input.setForceBrake(false);
     world.resetPose();   // 차를 출발점으로
+    adasOn();
     input.resync();
   },
   resyncInput: () => input.resync(),
@@ -89,9 +97,9 @@ const actions = {
   closeHelp() { document.getElementById('help').hidden = true; },
 };
 
-const input = setupInput({ exec, sendQuiet, getState: () => state, actions });
+const input = setupInput({ exec, sendQuiet, getState: () => state, actions, getAdas: () => adas });
 const toolbox = setupToolbox({
-  exec, sendQuiet, sim, actions,
+  exec, sendQuiet, sim, actions, getAdas: () => adas, getRadarShow: () => world.radarShow,
   scenarios: {
     list: () => listScenarios('../scenarios/'),
     async play(name) {
@@ -127,6 +135,7 @@ const world = createWorld(document.getElementById('view'), {
   startAt: Number(params.get('at')) || 0 });   // ?at=1200: 경로의 1.2 km 지점에서 출발 (발표·확인용)
 const minimap = mapData ? setupMinimap(document.getElementById('minimap'), mapData) : null;
 const hudEl = document.getElementById('hud');
+const radarPanel = createRadarPanel(document.getElementById('radar-panel'));
 
 // 화질: 기본(그림자·블룸 없음) / 표준 / 높음. 고른 값은 이 브라우저에 기억
 const qualityBtns = [...document.querySelectorAll('#quality [data-q]')];
@@ -141,7 +150,9 @@ showQuality();
 
 core.init(false);
 sendQuiet('drive on');
+adasOn();
 state = core.state();
+adas = core.adas();
 loading.remove();
 log('준비됨. I 시동 → D 기어 → ↑ 가속. H 도움말', 'info');
 
@@ -158,11 +169,15 @@ function frame(now) {
   last = now;
   if (!sim.paused) advance(dt * sim.rate);
   state = core.state();
-  toolbox.sync(state);
-  renderHud(hudEl, state, sim, scenario.active ? scenario.name : '');
-  // 직접 운전(주행 모드, 시나리오 재생 아님)이면 ←→가 핸들. 속도 직접 입력·시나리오는 경로를 자동으로 따라간다
+  adas = core.adas();
+  const pts = adas.on ? core.points() : null;
+  document.body.classList.toggle('adas', !!adas.on);
+  toolbox.sync(state, adas);
+  renderHud(hudEl, state, sim, scenario.active ? scenario.name : '', adas);
+  // 직접 운전(주행 모드, 시나리오 재생 아님)이면 ←→가 핸들. 속도 직접 입력·시나리오는 경로를 자동으로 따라간다.
+  // 레이더 장면(물체가 있거나 Stop & Go가 켜짐)도 경로를 따라간다: 레이더·맵은 도로를 편 좌표에서 계산하기 때문
   const blocked = world.update(state, sim.paused ? 0 : (dt / 1000) * sim.rate, input.lateral(),
-    { manual: state.in.drive && !scenario.active });
+    { manual: state.in.drive && !scenario.active, adas, pts });
   // 충돌: 화면이 차를 막고, 코어에는 브레이크를 밟은 것으로 보낸다(R4 경로). 속도가 0이 되면 놓는다
   if (blocked && state.in.speed_mkmh > 0 && !crash) {
     crash = blocked;
@@ -171,6 +186,7 @@ function frame(now) {
   }
   if (crash && state.in.speed_mkmh === 0) { crash = null; input.setForceBrake(false); }
   minimap?.update(world.where(), now);
+  radarPanel.render(adas, pts);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

@@ -1,0 +1,31 @@
+# 재출발 금지 (XS9): 서 있는 동안 왼쪽 앞에서 보행자가 건너면, 앞차가 떠나도 출발하지 않는다
+adas on
+drive on
+ign on
+gear d
+obj add car 25 0 30          # 앞차 #1: 25 m 앞, 30 km/h
+pedal 1 0
+wait 3
+pedal 0 0
+sg on
+sg set
+expect sg active
+wait 6
+obj 1 speed 0 2              # 앞차가 선다 (13.2초)
+wait 12                      # 자차는 20.2초쯤 정지 유지
+expect sg hold
+obj add ped 1.5 4 0          # #2 보행자: 자차 바로 앞, 왼쪽 4 m
+obj 2 lane -5 1.2            # 오른쪽으로 1.2 m/s로 건넌다
+wait 0.5
+obj 1 speed 30 1.5           # 21.5초: 앞차 출발
+wait 1.5                     # 23.0초
+expect sg hold               # (2) 측면 레이더가 다가오는 보행자를 봄 → 재출발 금지
+wait 1.5                     # 24.5초: 정지 3초 넘음
+expect sg wait
+sg res                       # 보행자가 경로 안 → RES도 안 됨
+expect sg wait
+wait 3                       # 27.5초: 보행자가 지나감
+sg res
+expect sg active
+wait 3
+expect moving on

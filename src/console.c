@@ -6,12 +6,13 @@
 #include "console.h"
 
 #include <ctype.h>
+#include <math.h>
 #include <stdarg.h>
 #include <stdlib.h>
 #include <string.h>
 
 #define MAX_LINE 256
-#define MAX_TOKENS 3
+#define MAX_TOKENS 6
 #define MAX_WAIT_MS 600000u /* wait 한 번에 최대 10분 */
 #define VALUE_LIMIT 1000000 /* 숫자 입력 허용 범위 (범위 밖 시험값 포함) */
 
@@ -21,7 +22,19 @@ typedef struct {
     bool rx_lost;
     bool lux_fault;
     bool rain_fault;
+    /* 레이더·Stop & Go (adas on일 때) */
+    bool adas_on;
+    SgState sg_state;
+    SgAlert sg_alert;
+    uint16_t lead_id;
+    MapStatus map_status;
+    RadarHealth health[RADAR_COUNT];
 } Watch;
+
+static const char *const SG_KO[] = {"꺼짐", "대기", "작동", "정지 유지", "재출발 대기"};
+static const char *const ALERT_KO[] = {"없음", "운전자 개입 요청", "레이더 고장", "출발 가능"};
+static const char *const MAP_KO[] = {"없음", "축소", "정상"};
+static const char *const HEALTH_KO[] = {"확인 중", "정상", "고장"};
 
 static const char *const WIPER_WORDS[] = {"stop", "int", "low", "high"};
 static const char *const GEAR_WORDS[] = {"p", "r", "n", "d"};
@@ -91,6 +104,13 @@ static Watch watch_take(const Console *c)
     w.rx_lost = c->sys.ctx.rx_lost;
     w.lux_fault = c->sys.ctx.lux_fault;
     w.rain_fault = c->sys.ctx.rain_fault;
+    w.adas_on = c->adas.on;
+    w.sg_state = c->adas.sg.state;
+    w.sg_alert = c->adas.sg.alert;
+    w.lead_id = c->adas.map.lead_id;
+    w.map_status = c->adas.map.status;
+    for (int i = 0; i < RADAR_COUNT; i++)
+        w.health[i] = c->adas.map.rx[i].health;
     return w;
 }
 
@@ -123,6 +143,29 @@ static void report_changes(const Console *c, const Watch *before)
         change(c, "(판정) 조도 센서 고장", yes_no(before->lux_fault), yes_no(now.lux_fault));
     if (before->rain_fault != now.rain_fault)
         change(c, "(판정) 강우 센서 고장", yes_no(before->rain_fault), yes_no(now.rain_fault));
+    if (!now.adas_on || !before->adas_on)
+        return;
+    for (int i = 0; i < RADAR_COUNT; i++) {
+        if (before->health[i] == now.health[i])
+            continue;
+        unsigned why = c->adas.map.rx[i].reason;
+        say(c, "  [%3u.%03us] (판정) 레이더 %s: %s → %s%s%s%s\n", sec_part(c->now), ms_part(c->now),
+            RADAR_MOUNTS[i].name, HEALTH_KO[before->health[i]], HEALTH_KO[now.health[i]],
+            why & RFAULT_TIMEOUT ? " (새 프레임 없음)" : "", why & RFAULT_STATUS ? " (레이더 자체 고장·가림)" : "",
+            why & RFAULT_STUCK ? " (값 고착)" : "");
+    }
+    if (before->map_status != now.map_status)
+        change(c, "(판정) 맵 상태", MAP_KO[before->map_status], MAP_KO[now.map_status]);
+    if (before->lead_id != now.lead_id) {
+        const Track *t = map_lead(&c->adas.map);
+        say(c, "  [%3u.%03us] 선행 차량: ", sec_part(c->now), ms_part(c->now));
+        if (before->lead_id) say(c, "#%u", (unsigned)before->lead_id); else say(c, "없음");
+        if (t) say(c, " → #%u (%.1f m)\n", (unsigned)t->id, (double)t->x); else say(c, " → 없음\n");
+    }
+    if (before->sg_state != now.sg_state)
+        change(c, "Stop & Go", SG_KO[before->sg_state], SG_KO[now.sg_state]);
+    if (before->sg_alert != now.sg_alert)
+        change(c, "Stop & Go 알림", ALERT_KO[before->sg_alert], ALERT_KO[now.sg_alert]);
 }
 
 /* ---- 입력 송신과 시간 진행 ---- */
@@ -141,13 +184,66 @@ static void send_signals(Console *c, vbc_ms_t t, unsigned mask)
     if (m & CON_RAIN) vbc_rx_rain(in, t, p->rain);
 }
 
-/* 현재 시각에서 한 주기 실행하고 바뀐 것을 표시 */
-static void step_now(Console *c)
+/* ---- 레이더·Stop & Go (adas on) ---- */
+
+static double ego_motion_mps(const Console *c)
+{
+    double v = c->drive_on ? c->drive.speed_mkmh / 3600.0 : c->panel.speed / 3.6;
+    Gear g = c->drive_on ? c->drive.gear : c->panel.gear;
+    if (v < 0)
+        v = 0;
+    return g == GEAR_R ? -v : v;
+}
+
+static void adas_reset(ConsoleAdas *a)
+{
+    world_init(&a->world);
+    radar_sim_init(&a->radar, 20261008u);
+    map_init(&a->map);
+    sg_init(&a->sg);
+}
+
+/* 50 ms 주기: 세계가 움직이고, 센서 모델이 프레임을 만들어 보내고, 맵이 갱신된다 */
+static void adas_tick(Console *c)
+{
+    ConsoleAdas *a = &c->adas;
+    double v = ego_motion_mps(c);
+
+    world_step(&a->world, CONSOLE_TICK_MS / 1000.0, v);
+    for (int id = 0; id < RADAR_COUNT; id++)
+        if (radar_sim_frame(&a->radar, (RadarId)id, &a->world, v, &a->frame))
+            map_rx_frame(&a->map, c->now, &a->frame, &c->sys.ctx);
+    map_step(&a->map, c->now, &c->sys.ctx);
+}
+
+/* Stop & Go 판단 → 주행 모델에 요청 (XR1, XR2) */
+static void adas_control(Console *c)
+{
+    ConsoleAdas *a = &c->adas;
+    SgPedals pd = {c->drive_on && c->drive.brake, c->drive_on && c->drive.throttle != THROTTLE_NONE};
+
+    sg_step(&a->sg, c->now, &c->sys.ctx, &a->map, pd);
+    if (c->drive_on)
+        drive_set_request(&c->drive, a->sg.accel_valid, (int32_t)lroundf(a->sg.accel * 1000.0f), a->sg.hold);
+}
+
+/* 현재 시각에서 한 주기 실행하고 바뀐 것을 표시. tick이면 레이더 프레임도 한 장씩 */
+static void step_core(Console *c, bool tick)
 {
     Watch before = watch_take(c);
 
     vbc_step(&c->sys, c->now);
+    if (c->adas.on) {
+        if (tick)
+            adas_tick(c);
+        adas_control(c);
+    }
     report_changes(c, &before);
+}
+
+static void step_now(Console *c)
+{
+    step_core(c, false);
 }
 
 /* 주기 입력 값을 바꾼 직후: 바뀐 입력을 지금 시각에 보내고 바로 반영 */
@@ -168,7 +264,7 @@ void console_advance(Console *c, vbc_ms_t ms)
             c->panel.speed = drive_speed_kmh(&c->drive);
         }
         send_signals(c, c->now, CON_ALL);
-        step_now(c);
+        step_core(c, true);
     }
 }
 
@@ -186,6 +282,8 @@ void console_init(Console *c, FILE *out)
     c->expect_failures = 0;
     drive_init(&c->drive);
     c->drive_on = false;
+    c->adas.on = false;
+    adas_reset(&c->adas);
 
     send_signals(c, 0, CON_ALL);
     vbc_step(&c->sys, 0);
@@ -381,6 +479,278 @@ static ConsoleResult cmd_wait(Console *c, const char *a)
     return CONSOLE_OK;
 }
 
+/* ---- 레이더·Stop & Go 명령 (exp/radar-stop-and-go, 요구사항 8.4) ---- */
+
+static bool parse_float(const char *s, double *v)
+{
+    char *end;
+    double x;
+
+    if (!s)
+        return false;
+    x = strtod(s, &end);
+    if (end == s || *end != '\0' || !isfinite(x) || fabs(x) > (double)VALUE_LIMIT)
+        return false;
+    *v = x;
+    return true;
+}
+
+static void adas_need(Console *c)
+{
+    if (c->adas.on)
+        return;
+    adas_reset(&c->adas);
+    c->adas.on = true;
+    say(c, "  레이더·Stop & Go 켬 (adas on)\n");
+}
+
+static ConsoleResult cmd_adas(Console *c, const char *a, const char *b)
+{
+    int on = parse_on_off(a);
+
+    if (a && ieq(a, "rail")) { /* adas rail on|off: 센서 모델의 오른쪽 가드레일 반사 (실제 지도에는 가드레일이 없음) */
+        int r = parse_on_off(b);
+        if (r < 0)
+            return err(c, "사용법: adas rail on|off");
+        adas_need(c);
+        c->adas.world.rail = r;
+        say(c, "  가드레일 반사 %s\n", r ? "켬" : "끔");
+        return CONSOLE_OK;
+    }
+    if (on < 0)
+        return err(c, "사용법: adas on|off, adas rail on|off");
+    if (on && !c->adas.on) {
+        adas_reset(&c->adas);
+        c->adas.on = true;
+    } else if (!on) {
+        c->adas.on = false;
+        drive_set_request(&c->drive, false, 0, false);
+    }
+    say(c, "  레이더·Stop & Go %s\n", on ? "켬" : "끔");
+    return CONSOLE_OK;
+}
+
+static void list_objects(const Console *c)
+{
+    const World *w = &c->adas.world;
+    int n = 0;
+
+    for (int i = 0; i < WORLD_MAX_OBJ; i++) {
+        const WorldObj *o = &w->obj[i];
+        if (!o->used)
+            continue;
+        Box3 b = world_box(w, o);
+        say(c, "    #%-3d %-8s 앞 %7.1f m  y %5.1f m  %6.1f km/h (목표 %.1f)\n", o->id, OBJ_SPECS[o->kind].name,
+            (double)b.x0, o->y, o->v * 3.6, o->v_target * 3.6);
+        n++;
+    }
+    if (!n)
+        say(c, "    (물체 없음)\n");
+}
+
+/* tracks: 맵의 확정 트랙 (all이면 확정 전 포함) */
+static ConsoleResult cmd_tracks(Console *c, const char *a)
+{
+    const AdasMap *m = &c->adas.map;
+    bool all = a && ieq(a, "all");
+    int n = 0;
+
+    for (int i = 0; i < MAP_MAX_TRACKS; i++) {
+        const Track *t = &m->tracks[i];
+        if (!t->used || (!t->confirmed && !all))
+            continue;
+        say(c, "    #%-5u x %6.1f  y %5.1f [%5.1f,%5.1f]  vx %6.1f vy %5.1f  z %s%4.1f~%4.1f  %s%s%s%s%s%s\n",
+            (unsigned)t->id, (double)t->x, (double)t->y, (double)(t->y - t->half_r), (double)(t->y + t->half_l),
+            (double)t->vx, (double)t->vy, t->has_z ? "" : "?", (double)t->z_lo, (double)t->z_hi,
+            t->confirmed ? "확정" : "후보", t->obstacle ? " 장애물" : " 무시", t->in_path ? " 경로내" : "",
+            t->stationary ? " 정지" : "", t->ever_moving ? " 움직였음" : "", t->id == m->lead_id ? " ◀선행" : "");
+        n++;
+    }
+    if (!n)
+        say(c, "    (트랙 없음)\n");
+    return CONSOLE_OK;
+}
+
+static ConsoleResult cmd_obj(Console *c, int n, char **tok)
+{
+    World *w = &c->adas.world;
+    const char *usage = "사용법: obj add car|truck|ped|bridge|sign|manhole <앞 거리 m> <y m> [속도 km/h]\n"
+                        "        obj <번호> speed <km/h> [가감속 m/s²] | obj <번호> lane <y m> [가로 속도 m/s]\n"
+                        "        obj <번호> del | obj clear | obj list";
+
+    adas_need(c);
+    if (n == 2 && ieq(tok[1], "clear")) {
+        world_clear(w);
+        say(c, "  물체를 모두 지움\n");
+        return CONSOLE_OK;
+    }
+    if (n == 2 && ieq(tok[1], "list")) {
+        list_objects(c);
+        return CONSOLE_OK;
+    }
+    if (n >= 5 && ieq(tok[1], "add")) {
+        int k = world_kind_from_name(tok[2]);
+        double ahead, y, kmh = 0;
+        if (k < 0 || !parse_float(tok[3], &ahead) || !parse_float(tok[4], &y) || (n >= 6 && !parse_float(tok[5], &kmh)))
+            return err(c, "%s", usage);
+        int id = world_add(w, (ObjKind)k, ahead, y, kmh / 3.6);
+        if (!id)
+            return err(c, "물체를 더 넣을 수 없습니다 (최대 %d개)", WORLD_MAX_OBJ);
+        say(c, "  물체 #%d %s: 앞 %.1f m, y %.1f m, %.0f km/h\n", id, OBJ_SPECS[k].name, ahead, y,
+            OBJ_SPECS[k].movable ? kmh : 0.0);
+        return CONSOLE_OK;
+    }
+    if (n >= 3) {
+        int32_t id;
+        WorldObj *o;
+        if (!parse_int(tok[1], &id) || !(o = world_find(w, id)))
+            return err(c, "물체 번호가 없습니다: %s (obj list)", tok[1]);
+        if (n == 3 && ieq(tok[2], "del")) {
+            world_remove(w, id);
+            say(c, "  물체 #%d 지움\n", (int)id);
+            return CONSOLE_OK;
+        }
+        if (n >= 4 && ieq(tok[2], "speed")) {
+            double kmh, acc = 2.0;
+            if (!parse_float(tok[3], &kmh) || (n >= 5 && (!parse_float(tok[4], &acc) || acc <= 0)))
+                return err(c, "%s", usage);
+            o->v_target = kmh / 3.6;
+            o->accel = acc;
+            say(c, "  물체 #%d 목표 속도 %.0f km/h (%.1f m/s²)\n", (int)id, kmh, acc);
+            return CONSOLE_OK;
+        }
+        if (n >= 4 && ieq(tok[2], "lane")) {
+            double y, vy = 1.0;
+            if (!parse_float(tok[3], &y) || (n >= 5 && (!parse_float(tok[4], &vy) || vy <= 0)))
+                return err(c, "%s", usage);
+            o->y_target = y;
+            o->vy_max = vy;
+            say(c, "  물체 #%d 가로 위치 → y %.1f m (%.1f m/s)\n", (int)id, y, vy);
+            return CONSOLE_OK;
+        }
+    }
+    return err(c, "%s", usage);
+}
+
+static ConsoleResult cmd_radar(Console *c, int n, char **tok)
+{
+    static const char *const IDS[] = {"fr", "fcl", "fcr"};
+    static const char *const MODES[] = {"ok", "cut", "repeat", "stuck", "block"};
+    int id = n == 3 ? parse_word(tok[1], IDS, 3) : -1;
+    int mode = n == 3 ? parse_word(tok[2], MODES, RADAR_FAULT_COUNT) : -1;
+    bool all = n == 3 && ieq(tok[1], "all");
+
+    if ((id < 0 && !all) || mode < 0)
+        return err(c, "사용법: radar fr|fcl|fcr|all ok|cut|repeat|stuck|block  (XH8 고장 주입)");
+    adas_need(c);
+    for (int i = 0; i < RADAR_COUNT; i++) {
+        if (!all && i != id)
+            continue;
+        radar_sim_set_fault(&c->adas.radar, (RadarId)i, (RadarFaultMode)mode);
+        say(c, "  레이더 %s 고장 주입: %s (%u.%03us부터)\n", RADAR_MOUNTS[i].name, MODES[mode], sec_part(c->now),
+            ms_part(c->now));
+    }
+    return CONSOLE_OK;
+}
+
+static ConsoleResult cmd_sg(Console *c, int n, char **tok)
+{
+    StopGo *sg = &c->adas.sg;
+    const char *a = n >= 2 ? tok[1] : NULL;
+
+    adas_need(c);
+    if (!a)
+        return err(c, "사용법: sg on|off|set|res|up|down, sg gap 1|2|3");
+    if (ieq(a, "on") || ieq(a, "off"))
+        sg_switch(sg, ieq(a, "on"));
+    else if (ieq(a, "set"))
+        sg_press_set(sg);
+    else if (ieq(a, "res"))
+        sg_press_res(sg);
+    else if (ieq(a, "up") || ieq(a, "down"))
+        sg_adjust(sg, ieq(a, "up") ? 1 : -1);
+    else if (ieq(a, "gap")) {
+        int32_t g;
+        if (n < 3 || !parse_int(tok[2], &g) || g < 1 || g > 3)
+            return err(c, "사용법: sg gap 1|2|3  (차간 시간 1.0 / 1.5 / 2.0 s)");
+        sg_set_gap(sg, (int)g);
+        say(c, "  차간 시간 %.1f s\n", (double)sg_gap_s(sg));
+    } else
+        return err(c, "사용법: sg on|off|set|res|up|down, sg gap 1|2|3");
+    step_now(c); /* 버튼은 누른 시각에 바로 판단 */
+    return CONSOLE_OK;
+}
+
+/* expect의 레이더·Stop & Go 항목. 항목이 아니면 false */
+static bool expect_adas(Console *c, int n, char **tok)
+{
+    static const char *const SG_W[] = {"off", "standby", "active", "hold", "wait"};
+    static const char *const AL_W[] = {"none", "takeover", "radar", "go"};
+    static const char *const MAP_W[] = {"none", "reduced", "ok"};
+    static const char *const H_W[] = {"unknown", "ok", "fault"};
+    static const char *const IDS[] = {"fr", "fcl", "fcr"};
+    const char *item = tok[1];
+    const char *want = n >= 3 ? tok[2] : NULL;
+    const char *const *words = NULL;
+    int count = 0, actual = 0, expected;
+    const ConsoleAdas *a = &c->adas;
+    int rid = parse_word(item, IDS, 3);
+
+    if (ieq(item, "gap")) { /* 정답 거리 (세계 기준) */
+        double lo, hi, g = world_truth_gap(&a->world);
+        if (n != 4 || !parse_float(tok[2], &lo) || !parse_float(tok[3], &hi)) {
+            err(c, "사용법: expect gap <최소 m> <최대 m>  (내 차로 앞 물체까지 실제 거리)");
+            return true;
+        }
+        bool ok = g >= 0 && g >= lo - 1e-9 && g <= hi + 1e-9;
+        if (!ok)
+            c->expect_failures++;
+        say(c, "  %s gap %.2f m  (기대 %.2f~%.2f, %u.%03us)\n", ok ? "✔" : "✘", g, lo, hi, sec_part(c->now),
+            ms_part(c->now));
+        return true;
+    }
+    if (ieq(item, "leadx")) { /* 맵이 고른 선행 차량까지 거리 */
+        double lo, hi;
+        const Track *t = map_lead(&a->map);
+        if (n != 4 || !parse_float(tok[2], &lo) || !parse_float(tok[3], &hi)) {
+            err(c, "사용법: expect leadx <최소 m> <최대 m>  (맵이 고른 선행 차량까지 거리)");
+            return true;
+        }
+        bool ok = t && t->x >= lo && t->x <= hi;
+        if (!ok)
+            c->expect_failures++;
+        if (t)
+            say(c, "  %s leadx %.2f m  (기대 %.2f~%.2f, %u.%03us)\n", ok ? "✔" : "✘", (double)t->x, lo, hi,
+                sec_part(c->now), ms_part(c->now));
+        else
+            say(c, "  ✘ leadx: 선행 차량 없음  (기대 %.2f~%.2f, %u.%03us)\n", lo, hi, sec_part(c->now), ms_part(c->now));
+        return true;
+    }
+    if (ieq(item, "sg")) { actual = a->sg.state; words = SG_W; count = 5; }
+    else if (ieq(item, "sgalert")) { actual = a->sg.alert; words = AL_W; count = 4; }
+    else if (ieq(item, "map")) { actual = a->map.status; words = MAP_W; count = 3; }
+    else if (rid >= 0) { actual = a->map.rx[rid].health; words = H_W; count = 3; }
+    else if (ieq(item, "lead")) actual = a->map.lead_id != 0;
+    else if (ieq(item, "hold")) actual = a->sg.hold;
+    else if (ieq(item, "moving")) actual = c->panel.speed > 0;
+    else
+        return false;
+
+    expected = words ? parse_word(want, words, count) : parse_on_off(want);
+    if (expected < 0) {
+        err(c, "%s의 기대값을 알 수 없습니다: %s", item, want ? want : "(없음)");
+        return true;
+    }
+    if (actual == expected) {
+        say(c, "  ✔ %s %s  (%u.%03us)\n", item, want, sec_part(c->now), ms_part(c->now));
+    } else {
+        c->expect_failures++;
+        say(c, "  ✘ %s: 기대 %s, 실제 %s  (%u.%03us)\n", item, want, words ? words[actual] : (actual ? "on" : "off"),
+            sec_part(c->now), ms_part(c->now));
+    }
+    return true;
+}
+
 /* expect <항목> <기대값>: 지금 출력이 기대와 같은지 확인하고 기록 */
 static ConsoleResult cmd_expect(Console *c, const char *item, const char *want)
 {
@@ -457,6 +827,9 @@ ConsoleResult console_exec(Console *c, const char *line)
     cmd = tok[0];
     a1 = n > 1 ? tok[1] : NULL;
     a2 = n > 2 ? tok[2] : NULL;
+    /* 인자 3개를 넘게 받는 것은 obj와 expect gap|leadx뿐이다 (그 밖에는 기존처럼 거부) */
+    if (n > 3 && !ieq(cmd, "obj") && !(ieq(cmd, "expect") && (ieq(tok[1], "gap") || ieq(tok[1], "leadx"))))
+        return err(c, "인자가 너무 많습니다. help 참고");
 
     if (ieq(cmd, "ign") || ieq(cmd, "ignition")) {
         int on = parse_on_off(a1);
@@ -511,8 +884,20 @@ ConsoleResult console_exec(Console *c, const char *line)
         return cmd_cut_resume(c, a1, false);
     if (ieq(cmd, "wait"))
         return cmd_wait(c, a1);
+    if (ieq(cmd, "expect") && n >= 2 && expect_adas(c, n, tok))
+        return CONSOLE_OK;
     if (ieq(cmd, "expect"))
         return cmd_expect(c, a1, a2);
+    if (ieq(cmd, "adas"))
+        return cmd_adas(c, a1, a2);
+    if (ieq(cmd, "obj"))
+        return cmd_obj(c, n, tok);
+    if (ieq(cmd, "tracks"))
+        return cmd_tracks(c, a1);
+    if (ieq(cmd, "radar"))
+        return cmd_radar(c, n, tok);
+    if (ieq(cmd, "sg"))
+        return cmd_sg(c, n, tok);
     if (ieq(cmd, "show") || ieq(cmd, "status")) {
         console_print_status(c);
         return CONSOLE_OK;
@@ -567,6 +952,36 @@ void console_print_status(const Console *c)
         on_off(o->rain_fault_lamp));
     say(c, "         도어 %s  계기판 경고 %s\n", o->door_locked ? "잠김" : "풀림",
         vbc_warning_name(o->warning));
+    if (!c->adas.on)
+        return;
+
+    const ConsoleAdas *a = &c->adas;
+    int objs = 0, tracks = 0, confirmed = 0;
+    for (int i = 0; i < WORLD_MAX_OBJ; i++)
+        objs += a->world.obj[i].used;
+    for (int i = 0; i < MAP_MAX_TRACKS; i++) {
+        tracks += a->map.tracks[i].used;
+        confirmed += a->map.tracks[i].used && a->map.tracks[i].confirmed;
+    }
+    say(c, "  [레이더]");
+    for (int i = 0; i < RADAR_COUNT; i++)
+        say(c, " %s %s(점 %d, 주입 %s)", RADAR_MOUNTS[i].name, HEALTH_KO[a->map.rx[i].health], a->map.n_pts[i],
+            radar_fault_name(a->radar.s[i].fault));
+    say(c, "\n         맵 %s, 트랙 %d개(확정 %d), 세계 물체 %d개\n", MAP_KO[a->map.status], tracks, confirmed, objs);
+    const Track *t = map_lead(&a->map);
+    say(c, "  [Stop & Go] %s  스위치 %s  설정 %dkm/h  차간 %.1fs  ", SG_KO[a->sg.state], a->sg.sw_on ? "ON" : "OFF",
+        a->sg.set_kmh, (double)sg_gap_s(&a->sg));
+    if (t)
+        say(c, "선행 #%u %.1fm (상대 %.1fm/s)\n", (unsigned)t->id, (double)t->x, (double)t->vx);
+    else
+        say(c, "선행 없음\n");
+    say(c, "         가속도 요청 ");
+    if (a->sg.accel_valid)
+        say(c, "%+.2f m/s²", (double)a->sg.accel);
+    else
+        say(c, "없음");
+    say(c, "  정지 유지 %s  알림 %s  실제 거리 %.2fm\n", yes_no(a->sg.hold), ALERT_KO[a->sg.alert],
+        world_truth_gap(&a->world));
 }
 
 void console_print_help(const Console *c)
@@ -596,6 +1011,17 @@ void console_print_help(const Console *c)
         "                            speed (km/h 숫자), gear (p|r|n|d),\n"
         "                            wiper (stop|int|low|high), warning (none|door|lux|rain)\n"
         "    reset                   초기 상태(C5)로\n"
+        "  [레이더·Stop & Go] (exp/radar-stop-and-go, 요구사항 8.4)\n"
+        "    adas on|off             레이더 센서 모델·맵·Stop & Go 켜기 (obj, radar, sg를 쓰면 자동으로 켬)\n"
+        "    adas rail on|off        센서 모델의 오른쪽 가드레일 반사 (실제 지도 모드에서는 끔)\n"
+        "    obj add <종류> <앞 m> <y m> [km/h]   종류 car truck ped bridge sign manhole. y는 왼쪽 +\n"
+        "    obj <번호> speed <km/h> [m/s²] | lane <y m> [m/s] | del,  obj clear,  obj list\n"
+        "    radar fr|fcl|fcr|all ok|cut|repeat|stuck|block   레이더 고장 주입 (XH8)\n"
+        "    sg on|off|set|res|up|down,  sg gap 1|2|3          Stop & Go 스위치·버튼\n"
+        "    expect sg off|standby|active|hold|wait,  sgalert none|takeover|radar|go,\n"
+        "           map none|reduced|ok,  fr|fcl|fcr unknown|ok|fault,  lead|hold|moving on|off,\n"
+        "           gap <최소 m> <최대 m>  (내 차로 앞 물체까지 실제 거리), leadx <최소 m> <최대 m> (맵의 선행 차량)\n"
+        "    tracks [all]            맵의 확정 트랙 (all: 확정 전 포함)\n"
         "    help, quit\n"
         "  '#' 뒤는 주석. 같은 명령을 파일에 적어 ./build/vbc <파일> 로 실행할 수 있다.\n");
 }

@@ -11,6 +11,12 @@ export async function createCore() {
     exec: (line) => exec(line),             // 0 OK, 1 오류, 2 quit
     advance: (ms) => mod._sim_advance(ms),
     state: () => JSON.parse(mod.UTF8ToString(mod._sim_state())),
+    // 레이더·Stop & Go: 맵·트랙·세계 물체 JSON, 맵이 차량 좌표로 바꾼 검출점 (점마다 6개: 센서 x y z 도플러 표시)
+    adas: () => JSON.parse(mod.UTF8ToString(mod._sim_adas())),
+    points: () => {
+      const ptr = mod._sim_points() >> 2, n = mod._sim_points_count();
+      return mod.HEAPF32.slice(ptr, ptr + n * 6);
+    },
     onLog: (fn) => { logHandler = fn; },
   };
 }

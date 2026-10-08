@@ -19,7 +19,9 @@
 
 #include <stdio.h>
 
+#include "adas_stopgo.h"
 #include "drive.h"
+#include "env_radar.h"
 #include "vbc.h"
 
 #define CONSOLE_TICK_MS 50u /* 주기 입력 송신 간격. 0.5초보다 짧아야 한다 */
@@ -45,6 +47,16 @@ typedef struct {
     unsigned cut; /* 송신 중단 중인 입력 (CON_* 조합) */
 } Panel;
 
+/* 레이더·Stop & Go 실험 (exp/radar-stop-and-go). adas on으로 켠다. 꺼져 있으면 기존 동작과 같다 */
+typedef struct {
+    bool on;
+    World world;      /* 시뮬레이터 세계: 교통 참여자·고정 물체 (8.3) */
+    RadarSim radar;   /* 레이더 센서 모델 = 가상 하드웨어 (8.2) */
+    RadarFrame frame; /* 작업용 프레임 한 장 */
+    AdasMap map;      /* 제품: 전방 맵 (XC, XM) */
+    StopGo sg;        /* 제품: Stop & Go (XS, XD) */
+} ConsoleAdas;
+
 typedef struct {
     VbcSystem sys;
     Panel panel;
@@ -53,6 +65,7 @@ typedef struct {
     vbc_ms_t now;
     FILE *out;           /* 결과를 쓸 곳. NULL이면 아무것도 쓰지 않는다 (테스트용) */
     int expect_failures; /* expect 불일치 횟수 */
+    ConsoleAdas adas;
 } Console;
 
 typedef enum { CONSOLE_OK, CONSOLE_ERROR, CONSOLE_QUIT } ConsoleResult;
