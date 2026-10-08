@@ -1,0 +1,393 @@
+조명 (L1~L6) 테스트 콘솔 (신호 주입기)
+  우선순위 L1 시동 OFF 소등 > L5 조도 고장 점등·표시 > L4 스위치 ON/OFF > L6 와이퍼 10초 작동 > L2 1000 lux 미만 1초 점등 · L3 1500 lux 초과 3초 소등(그 사이는 직전 유지)
+  h: 명령 목록
+> 
+# 조명 L1~L6 테스트 케이스 (make con-lighting 으로 실행되는 lighting_step만 시험)
+> 
+# 시작 상태: 시동 OFF, 조도 30000, 조명 스위치 OFF, 와이퍼 단계(level) 정지
+> 
+# 와이퍼 모듈은 실행하지 않는다. L6은 level을 직접 넣어 시험한다.
+> 
+# 기대값은 사양서 5.1 L1~L6, 4장 C1·C2·C4. obs는 사양서에 정해지지 않은 동작.
+> 
+> tc TC-L-C5-01 | C5 | 시작 상태 | 초기 상태 | 전조등 꺼짐, 조도 고장 표시 꺼짐
+  ▶ TC TC-L-C5-01 | C5 | 시작 상태 | 초기 상태 | 전조등 꺼짐, 조도 고장 표시 꺼짐
+> e headlight off
+  ✔ PASS [TC-L-C5-01] headlight = off  (0.000s)
+> e luxlamp off
+  ✔ PASS [TC-L-C5-01] luxlamp = off  (0.000s)
+> 
+> tc TC-L1-01 | L1 > L4 | 결정 테이블 | 시동 OFF, 스위치 ON | 꺼짐
+  ▶ TC TC-L1-01 | L1 > L4 | 결정 테이블 | 시동 OFF, 스위치 ON | 꺼짐
+> light on
+  → 변화 없음
+> e headlight off
+  ✔ PASS [TC-L1-01] headlight = off  (0.000s)
+> tc TC-L4-01 | L4 | 결정 테이블 | 시동 ON, 스위치 ON (조도 30000) | 켜짐
+  ▶ TC TC-L4-01 | L4 | 결정 테이블 | 시동 ON, 스위치 ON (조도 30000) | 켜짐
+> ign on
+  → [  0.000s] 전조등: 꺼짐 → 켜짐
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> e headlight on
+  ✔ PASS [TC-L4-01] headlight = on  (0.000s)
+> tc TC-L4-02 | L4 | 결정 테이블 | 스위치 OFF, 조도 300, 2초 | 꺼짐 (어두워도)
+  ▶ TC TC-L4-02 | L4 | 결정 테이블 | 스위치 OFF, 조도 300, 2초 | 꺼짐 (어두워도)
+> light off
+  → [  0.000s] 전조등: 켜짐 → 꺼짐
+> lux 300
+  → 변화 없음
+> t 2
+  → 2.000초 동안 변화 없음
+> e headlight off
+  ✔ PASS [TC-L4-02] headlight = off  (2.000s)
+> 
+> tc TC-L2-01 | L2, C1 | 경계값(시간 3-value) | 처음부터 시동 ON, AUTO, 조도 999 후 0.999초 | 꺼짐
+  ▶ TC TC-L2-01 | L2, C1 | 경계값(시간 3-value) | 처음부터 시동 ON, AUTO, 조도 999 후 0.999초 | 꺼짐
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light auto
+  → 변화 없음
+> lux 999
+  → 변화 없음
+> t 0.999
+  → 0.999초 동안 변화 없음
+> e headlight off
+  ✔ PASS [TC-L2-01] headlight = off  (0.999s)
+> tc TC-L2-02 | L2, C1 | 경계값(시간 3-value) | 이어서 +1ms (1.000초) | 켜짐
+  ▶ TC TC-L2-02 | L2, C1 | 경계값(시간 3-value) | 이어서 +1ms (1.000초) | 켜짐
+> t 0.001
+  → [  1.000s] 전조등: 꺼짐 → 켜짐
+> e headlight on
+  ✔ PASS [TC-L2-02] headlight = on  (1.000s)
+> tc TC-L2-03 | L2 | 경계값(조도 3-value) | 처음부터 시동 ON, AUTO, 조도 1000, 3초 | 꺼짐 (1000 미만 아님)
+  ▶ TC TC-L2-03 | L2 | 경계값(조도 3-value) | 처음부터 시동 ON, AUTO, 조도 1000, 3초 | 꺼짐 (1000 미만 아님)
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light auto
+  → 변화 없음
+> lux 1000
+  → 변화 없음
+> t 3
+  → 3.000초 동안 변화 없음
+> e headlight off
+  ✔ PASS [TC-L2-03] headlight = off  (3.000s)
+> tc TC-L2-04 | L2, C1 | 상태 전이(연속 끊김 → 다시 셈) | 조도 300 0.9초 → 1000 0.1초 → 300 0.999초 | 꺼짐 (처음부터 다시 셈)
+  ▶ TC TC-L2-04 | L2, C1 | 상태 전이(연속 끊김 → 다시 셈) | 조도 300 0.9초 → 1000 0.1초 → 300 0.999초 | 꺼짐 (처음부터 다시 셈)
+> lux 300
+  → 변화 없음
+> t 0.9
+  → 0.900초 동안 변화 없음
+> lux 1000
+  → 변화 없음
+> t 0.1
+  → 0.100초 동안 변화 없음
+> lux 300
+  → 변화 없음
+> t 0.999
+  → 0.999초 동안 변화 없음
+> e headlight off
+  ✔ PASS [TC-L2-04] headlight = off  (4.999s)
+> tc TC-L2-05 | L2, C1 | 상태 전이(연속 끊김 → 다시 셈) | 이어서 +1ms | 켜짐
+  ▶ TC TC-L2-05 | L2, C1 | 상태 전이(연속 끊김 → 다시 셈) | 이어서 +1ms | 켜짐
+> t 0.001
+  → [  5.000s] 전조등: 꺼짐 → 켜짐
+> e headlight on
+  ✔ PASS [TC-L2-05] headlight = on  (5.000s)
+> tc TC-L3-01 | L3, C1 | 경계값(시간 3-value) | 켜진 상태에서 조도 1501, 2.999초 | 켜짐
+  ▶ TC TC-L3-01 | L3, C1 | 경계값(시간 3-value) | 켜진 상태에서 조도 1501, 2.999초 | 켜짐
+> lux 1501
+  → 변화 없음
+> t 2.999
+  → 2.999초 동안 변화 없음
+> e headlight on
+  ✔ PASS [TC-L3-01] headlight = on  (7.999s)
+> tc TC-L3-02 | L3, C1 | 경계값(시간 3-value) | 이어서 +1ms (3.000초) | 꺼짐
+  ▶ TC TC-L3-02 | L3, C1 | 경계값(시간 3-value) | 이어서 +1ms (3.000초) | 꺼짐
+> t 0.001
+  → [  8.000s] 전조등: 켜짐 → 꺼짐
+> e headlight off
+  ✔ PASS [TC-L3-02] headlight = off  (8.000s)
+> tc TC-L3-03 | L3 | 경계값(조도) + 직전 유지 | 조도 300으로 켠 뒤 조도 1500, 5초 | 켜짐 유지 (1500 초과 아님)
+  ▶ TC TC-L3-03 | L3 | 경계값(조도) + 직전 유지 | 조도 300으로 켠 뒤 조도 1500, 5초 | 켜짐 유지 (1500 초과 아님)
+> lux 300
+  → 변화 없음
+> t 1
+  → [  9.000s] 전조등: 꺼짐 → 켜짐
+> e headlight on
+  ✔ PASS [TC-L3-03] headlight = on  (9.000s)
+> lux 1500
+  → 변화 없음
+> t 5
+  → 5.000초 동안 변화 없음
+> e headlight on
+  ✔ PASS [TC-L3-03] headlight = on  (14.000s)
+> tc TC-L3-04 | L3 | 동치(1000~1500 직전 유지, 꺼진 상태) | 조도 30000으로 끈 뒤 조도 1200, 5초 | 꺼짐 유지
+  ▶ TC TC-L3-04 | L3 | 동치(1000~1500 직전 유지, 꺼진 상태) | 조도 30000으로 끈 뒤 조도 1200, 5초 | 꺼짐 유지
+> lux 30000
+  → 변화 없음
+> t 3
+  → [ 17.000s] 전조등: 켜짐 → 꺼짐
+> e headlight off
+  ✔ PASS [TC-L3-04] headlight = off  (17.000s)
+> lux 1200
+  → 변화 없음
+> t 5
+  → 5.000초 동안 변화 없음
+> e headlight off
+  ✔ PASS [TC-L3-04] headlight = off  (22.000s)
+> tc TC-L2-06 | L2, C1 | 동치(AUTO가 아닐 때 세지 않음) | 스위치 OFF, 조도 300 0.5초 → AUTO 0.999초 | 꺼짐 (AUTO부터 셈)
+  ▶ TC TC-L2-06 | L2, C1 | 동치(AUTO가 아닐 때 세지 않음) | 스위치 OFF, 조도 300 0.5초 → AUTO 0.999초 | 꺼짐 (AUTO부터 셈)
+> light off
+  → 변화 없음
+> lux 300
+  → 변화 없음
+> t 0.5
+  → 0.500초 동안 변화 없음
+> light auto
+  → 변화 없음
+> t 0.999
+  → 0.999초 동안 변화 없음
+> e headlight off
+  ✔ PASS [TC-L2-06] headlight = off  (23.499s)
+> t 0.001
+  → [ 23.500s] 전조등: 꺼짐 → 켜짐
+> e headlight on
+  ✔ PASS [TC-L2-06] headlight = on  (23.500s)
+> 
+> tc TC-L5-01 | L5 > L4 | 동치(무효: 위) | 처음부터 시동 ON, 스위치 OFF, 조도 60001 | 켜짐 + 고장 표시
+  ▶ TC TC-L5-01 | L5 > L4 | 동치(무효: 위) | 처음부터 시동 ON, 스위치 OFF, 조도 60001 | 켜짐 + 고장 표시
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light off
+  → 변화 없음
+> lux 60001
+  → [  0.000s] 전조등: 꺼짐 → 켜짐
+  → [  0.000s] 조도 고장 표시: 꺼짐 → 켜짐
+  → [  0.000s] (판정) 조도 고장: 아니오 → 예
+> e headlight on
+  ✔ PASS [TC-L5-01] headlight = on  (0.000s)
+> e luxlamp on
+  ✔ PASS [TC-L5-01] luxlamp = on  (0.000s)
+> tc TC-L5-02 | L5, C2 | 경계값(유효 상한) | 조도 60000 | 꺼짐(L4 OFF), 고장 표시 꺼짐
+  ▶ TC TC-L5-02 | L5, C2 | 경계값(유효 상한) | 조도 60000 | 꺼짐(L4 OFF), 고장 표시 꺼짐
+> lux 60000
+  → [  0.000s] 전조등: 켜짐 → 꺼짐
+  → [  0.000s] 조도 고장 표시: 켜짐 → 꺼짐
+  → [  0.000s] (판정) 조도 고장: 예 → 아니오
+> e headlight off
+  ✔ PASS [TC-L5-02] headlight = off  (0.000s)
+> e luxlamp off
+  ✔ PASS [TC-L5-02] luxlamp = off  (0.000s)
+> tc TC-L5-03 | L5, C2 | 동치(무효: 아래) | 조도 -1 | 켜짐 + 고장 표시
+  ▶ TC TC-L5-03 | L5, C2 | 동치(무효: 아래) | 조도 -1 | 켜짐 + 고장 표시
+> lux -1
+  → [  0.000s] 전조등: 꺼짐 → 켜짐
+  → [  0.000s] 조도 고장 표시: 꺼짐 → 켜짐
+  → [  0.000s] (판정) 조도 고장: 아니오 → 예
+> e headlight on
+  ✔ PASS [TC-L5-03] headlight = on  (0.000s)
+> e luxlamp on
+  ✔ PASS [TC-L5-03] luxlamp = on  (0.000s)
+> tc TC-L5-04 | L5, C2 | 경계값(시간 3-value) | 조도 30000 후 조도 송신만 끊고 0.499 / 0.500초 | 표시 꺼짐 → 켜짐
+  ▶ TC TC-L5-04 | L5, C2 | 경계값(시간 3-value) | 조도 30000 후 조도 송신만 끊고 0.499 / 0.500초 | 표시 꺼짐 → 켜짐
+> lux 30000
+  → [  0.000s] 전조등: 켜짐 → 꺼짐
+  → [  0.000s] 조도 고장 표시: 켜짐 → 꺼짐
+  → [  0.000s] (판정) 조도 고장: 예 → 아니오
+> cut lux
+  송신 끊음: lux (마지막 수신 후 0.5초가 지나야 판정이 바뀝니다)
+> t 0.499
+  → 0.499초 동안 변화 없음
+> e luxlamp off
+  ✔ PASS [TC-L5-04] luxlamp = off  (0.499s)
+> t 0.001
+  → [  0.500s] 전조등: 꺼짐 → 켜짐
+  → [  0.500s] 조도 고장 표시: 꺼짐 → 켜짐
+  → [  0.500s] (판정) 조도 고장: 아니오 → 예
+> e luxlamp on
+  ✔ PASS [TC-L5-04] luxlamp = on  (0.500s)
+> e headlight on
+  ✔ PASS [TC-L5-04] headlight = on  (0.500s)
+> tc TC-L5-05 | L5, L1 | 결정 테이블(표시는 시동 무관) | 이어서 시동 OFF | 전조등 꺼짐, 고장 표시 유지
+  ▶ TC TC-L5-05 | L5, L1 | 결정 테이블(표시는 시동 무관) | 이어서 시동 OFF | 전조등 꺼짐, 고장 표시 유지
+> ign off
+  → [  0.500s] 전조등: 켜짐 → 꺼짐
+  → [  0.500s] (판정) 시동 켜짐으로 봄: 예 → 아니오
+> e headlight off
+  ✔ PASS [TC-L5-05] headlight = off  (0.500s)
+> e luxlamp on
+  ✔ PASS [TC-L5-05] luxlamp = on  (0.500s)
+> tc TC-L5-06 | L5, C2 | 상태 전이(복귀) | 시동 ON, 조도 송신 재개 | 고장 표시 꺼짐
+  ▶ TC TC-L5-06 | L5, C2 | 상태 전이(복귀) | 시동 ON, 조도 송신 재개 | 고장 표시 꺼짐
+> ign on
+  → [  0.500s] 전조등: 꺼짐 → 켜짐
+  → [  0.500s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> resume lux
+  → [  0.500s] 전조등: 켜짐 → 꺼짐
+  → [  0.500s] 조도 고장 표시: 켜짐 → 꺼짐
+  → [  0.500s] (판정) 조도 고장: 예 → 아니오
+> e luxlamp off
+  ✔ PASS [TC-L5-06] luxlamp = off  (0.500s)
+> 
+> tc TC-L6-01 | L6, C1 | 경계값(시간 3-value) | 처음부터 시동 ON, AUTO, 낮, level 저속 9.999초 | 꺼짐
+  ▶ TC TC-L6-01 | L6, C1 | 경계값(시간 3-value) | 처음부터 시동 ON, AUTO, 낮, level 저속 9.999초 | 꺼짐
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light auto
+  → 변화 없음
+> level low
+  → 변화 없음
+> t 9.999
+  → 9.999초 동안 변화 없음
+> e headlight off
+  ✔ PASS [TC-L6-01] headlight = off  (9.999s)
+> tc TC-L6-02 | L6, C1 | 경계값(시간 3-value) | 이어서 +1ms (10.000초) | 켜짐
+  ▶ TC TC-L6-02 | L6, C1 | 경계값(시간 3-value) | 이어서 +1ms (10.000초) | 켜짐
+> t 0.001
+  → [ 10.000s] 전조등: 꺼짐 → 켜짐
+> e headlight on
+  ✔ PASS [TC-L6-02] headlight = on  (10.000s)
+> tc TC-L6-03 | L6 | 상태 전이(작동하는 동안 유지) | 이어서 5초 | 켜짐
+  ▶ TC TC-L6-03 | L6 | 상태 전이(작동하는 동안 유지) | 이어서 5초 | 켜짐
+> t 5
+  → 5.000초 동안 변화 없음
+> e headlight on
+  ✔ PASS [TC-L6-03] headlight = on  (15.000s)
+> tc TC-L6-04 | L6, L3, C1 | 상태 전이(해제) | level 정지 | 바로 꺼짐 (밝음 3초는 그동안 계속 셈)
+  ▶ TC TC-L6-04 | L6, L3, C1 | 상태 전이(해제) | level 정지 | 바로 꺼짐 (밝음 3초는 그동안 계속 셈)
+> level stop
+  → [ 15.000s] 전조등: 켜짐 → 꺼짐
+> e headlight off
+  ✔ PASS [TC-L6-04] headlight = off  (15.000s)
+> tc TC-L6-05 | L6 | 동치(간헐도 작동) | level 간헐 10초 | 켜짐
+  ▶ TC TC-L6-05 | L6 | 동치(간헐도 작동) | level 간헐 10초 | 켜짐
+> level int
+  → 변화 없음
+> t 10
+  → [ 25.000s] 전조등: 꺼짐 → 켜짐
+> e headlight on
+  ✔ PASS [TC-L6-05] headlight = on  (25.000s)
+> tc TC-L6-06 | L6 | 동치(AUTO가 아니면 L6 아님) | 처음부터 시동 ON, 스위치 OFF, level 고속 10초 | 꺼짐 (L4)
+  ▶ TC TC-L6-06 | L6 | 동치(AUTO가 아니면 L6 아님) | 처음부터 시동 ON, 스위치 OFF, level 고속 10초 | 꺼짐 (L4)
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light off
+  → 변화 없음
+> level high
+  → 변화 없음
+> t 10
+  → 10.000초 동안 변화 없음
+> e headlight off
+  ✔ PASS [TC-L6-06] headlight = off  (10.000s)
+> tc TC-L6-07 | L6, C1 | 결정 테이블(L4가 정하는 동안에도 셈) | 이어서 AUTO로 | 바로 켜짐 (10초는 이미 셈)
+  ▶ TC TC-L6-07 | L6, C1 | 결정 테이블(L4가 정하는 동안에도 셈) | 이어서 AUTO로 | 바로 켜짐 (10초는 이미 셈)
+> light auto
+  → [ 10.000s] 전조등: 꺼짐 → 켜짐
+> e headlight on
+  ✔ PASS [TC-L6-07] headlight = on  (10.000s)
+> 
+> tc TC-L-C4-01 | L1, C4 | 경계값(시간 3-value) | 처음부터 시동 ON, 스위치 ON, 세 신호 끊고 0.499 / 0.500초 | 켜짐 → 꺼짐 (시동 꺼짐으로 봄)
+  ▶ TC TC-L-C4-01 | L1, C4 | 경계값(시간 3-value) | 처음부터 시동 ON, 스위치 ON, 세 신호 끊고 0.499 / 0.500초 | 켜짐 → 꺼짐 (시동 꺼짐으로 봄)
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light on
+  → [  0.000s] 전조등: 꺼짐 → 켜짐
+> cut vehicle
+  송신 끊음: vehicle (마지막 수신 후 0.5초가 지나야 판정이 바뀝니다)
+> t 0.499
+  → 0.499초 동안 변화 없음
+> e headlight on
+  ✔ PASS [TC-L-C4-01] headlight = on  (0.499s)
+> t 0.001
+  → [  0.500s] 전조등: 켜짐 → 꺼짐
+  → [  0.500s] (판정) 수신 중단: 아니오 → 예
+  → [  0.500s] (판정) 시동 켜짐으로 봄: 예 → 아니오
+  → [  0.500s] (판정) 유효한 속도: 예 → 아니오
+> e rxlost yes
+  ✔ PASS [TC-L-C4-01] rxlost = yes  (0.500s)
+> e headlight off
+  ✔ PASS [TC-L-C4-01] headlight = off  (0.500s)
+> 
+> tc TC-L-Q11-01 | (정의 없음) Q11 | Negative(조명 스위치 코드) | 처음부터 시동 ON, 스위치 ON(켜짐) → 코드 7, 조도 300·30000 각 5초 | 스위치 코드 정의 안 됨 판정. 동작은 관찰
+  ▶ TC TC-L-Q11-01 | (정의 없음) Q11 | Negative(조명 스위치 코드) | 처음부터 시동 ON, 스위치 ON(켜짐) → 코드 7, 조도 300·30000 각 5초 | 스위치 코드 정의 안 됨 판정. 동작은 관찰
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light on
+  → [  0.000s] 전조등: 꺼짐 → 켜짐
+> light 7
+  → [  0.000s] (판정) 조명 스위치 코드 정의됨: 예 → 아니오
+> e lightvalid no
+  ✔ PASS [TC-L-Q11-01] lightvalid = no  (0.000s)
+> obs headlight
+  ◎ OBS  [TC-L-Q11-01] headlight = on  (0.000s) — 사양서에 정해지지 않은 동작, 관찰만 기록
+> lux 300
+  → 변화 없음
+> t 5
+  → 5.000초 동안 변화 없음
+> obs headlight
+  ◎ OBS  [TC-L-Q11-01] headlight = on  (5.000s) — 사양서에 정해지지 않은 동작, 관찰만 기록
+> lux 30000
+  → 변화 없음
+> t 5
+  → 5.000초 동안 변화 없음
+> obs headlight
+  ◎ OBS  [TC-L-Q11-01] headlight = on  (10.000s) — 사양서에 정해지지 않은 동작, 관찰만 기록
+> tc TC-L-Q11-02 | (정의 없음) Q11 | Negative(조명 스위치 코드) | 처음부터 시동 ON, 꺼진 상태에서 코드 -1, level 저속 10초 | 관찰
+  ▶ TC TC-L-Q11-02 | (정의 없음) Q11 | Negative(조명 스위치 코드) | 처음부터 시동 ON, 꺼진 상태에서 코드 -1, level 저속 10초 | 관찰
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light -1
+  → [  0.000s] (판정) 조명 스위치 코드 정의됨: 예 → 아니오
+> level low
+  → 변화 없음
+> t 10
+  → [ 10.000s] 전조등: 꺼짐 → 켜짐
+> obs headlight
+  ◎ OBS  [TC-L-Q11-02] headlight = on  (10.000s) — 사양서에 정해지지 않은 동작, 관찰만 기록
+> tc TC-L-Q9-01 | (정의 없음) Q9 | Negative(시동 코드) | 처음부터 스위치 ON, 시동 코드 2 | 관찰
+  ▶ TC TC-L-Q9-01 | (정의 없음) Q9 | Negative(시동 코드) | 처음부터 스위치 ON, 시동 코드 2 | 관찰
+> r
+  처음 상태(C5), 시각 0초
+> light on
+  → 변화 없음
+> ign 2
+  → [  0.000s] 전조등: 꺼짐 → 켜짐
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+  → [  0.000s] (판정) 시동 코드 정의됨: 예 → 아니오
+> e ignvalid no
+  ✔ PASS [TC-L-Q9-01] ignvalid = no  (0.000s)
+> obs headlight
+  ◎ OBS  [TC-L-Q9-01] headlight = on  (0.000s) — 사양서에 정해지지 않은 동작, 관찰만 기록
+> tc TC-L-IF-01 | (모듈 간 약속) L6 | Negative(와이퍼 단계 코드) | 처음부터 시동 ON, AUTO, level 코드 9 10초 | 관찰 (와이퍼 모듈이 내보낼 수 없는 값)
+  ▶ TC TC-L-IF-01 | (모듈 간 약속) L6 | Negative(와이퍼 단계 코드) | 처음부터 시동 ON, AUTO, level 코드 9 10초 | 관찰 (와이퍼 모듈이 내보낼 수 없는 값)
+> r
+  처음 상태(C5), 시각 0초
+> ign on
+  → [  0.000s] (판정) 시동 켜짐으로 봄: 아니오 → 예
+> light auto
+  → 변화 없음
+> level 9
+  → 변화 없음
+> t 10
+  → [ 10.000s] 전조등: 꺼짐 → 켜짐
+> obs headlight
+  ◎ OBS  [TC-L-IF-01] headlight = on  (10.000s) — 사양서에 정해지지 않은 동작, 관찰만 기록
+> q
+
+== 조명 (L1~L6) 결과: TC 32개 (FAIL 있는 TC 0개), 확인 42건 중 FAIL 0건, 관찰 6건
