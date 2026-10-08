@@ -42,6 +42,7 @@ make con-doors   # 대화형: con-dashboard, con-lighting, con-wipers
 | `fl 1`, `fr open`, `rl 2`, `rr -1` | 도어 4개 (0 닫힘, 1 열림, 그 밖의 코드도 그대로) |
 | `light auto`, `light 7`, `wiper high`, `wiper -1` | 스위치 (이름 또는 아무 코드) |
 | `level low`, `level 9` | 조명 콘솔 전용: L6에 넘길 와이퍼 단계 (와이퍼 모듈은 실행하지 않음) |
+| `lock on`, `lock off` | 도어 콘솔 전용: **직전 잠금 상태**를 바로 넣음. 잠금은 사양서 입력이 아니라 모듈 상태라 0/1만 됨. 넣은 시각에 바로 판단하므로 시동 OFF·기어 P면 곧 풀림(D2) |
 | `t 0.499` | 시간 진행, **1ms 단위** |
 | `cut speed`, `cut vehicle`, `cut all` | 송신 끊기 (신호마다 따로. vehicle = 속도·기어·시동) |
 | `resume speed` | 송신 다시 시작 (그 시각에 바로 보냄) |

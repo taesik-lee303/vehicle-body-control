@@ -336,6 +336,9 @@ static void print_status(ModCon *m)
         printf("   %2d) %-6s %s [%s]%s\n", ++no, SIGS[k].cmd, SIGS[k].label, val,
                (SIGS[k].periodic && (m->cut & SIGS[k].periodic)) ? " (송신 끊김)" : "");
     }
+    if (m->state_cmd)
+        printf("   %2d) %-6s %s [%s] (모듈 상태 주입, 0 %s / 1 %s)\n", ++no, m->state_cmd, m->state_label,
+               m->state_words[m->mod_get_state(m)], m->state_words[0], m->state_words[1]);
     printf("  [기타] t 시간 진행 | cut/resume/send <신호> | auto on/off | period step/send <ms> | e·obs·tc 판정 | r 처음으로 | h 도움말 | q 종료\n");
 }
 
@@ -345,6 +348,9 @@ static void help(const ModCon *m)
     printf("  명령 (대소문자 무관)\n");
     for (int k = 0; k < K_COUNT; k++)
         printf("    %-6s <값>        %s: %s. 그 밖의 정수도 그대로 보냄\n", SIGS[k].cmd, SIGS[k].label, SIGS[k].codes);
+    if (m->state_cmd)
+        printf("    %-6s on|off      %s 주입 (0·off %s, 1·on %s). 사양서 입력이 아닌 모듈 상태, 넣은 시각에 바로 판단\n",
+               m->state_cmd, m->state_label, m->state_words[0], m->state_words[1]);
     printf("    t <초>              시간 진행, 1ms 단위 (예: t 0.499, t 0.001, t 3)\n"
            "    cut <신호>          주기 신호 송신 끊기: speed gear ign lux rain vehicle(앞 셋) all\n"
            "    resume <신호>       송신 다시 시작 (그 시각에 바로 보냄)\n"
@@ -477,6 +483,24 @@ static void set_signal(ModCon *m, SigKey k, int32_t v)
     step_now(m);
 }
 
+/* 직전 상태 주입: 모듈 상태와 출력을 바꾸고 그 시각에 바로 판단한다 (D2처럼 규칙이 바로 바꾸면 '→'로 보임) */
+static void set_state(ModCon *m, const char *arg)
+{
+    const Alias words[] = {{"off", 0}, {"on", 1}, {m->state_words[0], 0}, {m->state_words[1], 1}, {NULL, 0}};
+    int32_t v;
+
+    if (!arg || !parse_value(arg, words, &v) || (v != 0 && v != 1)) {
+        printf("  ! %s on|off (0·off %s, 1·on %s). 모듈 상태라 0/1만 됩니다\n", m->state_cmd, m->state_words[0],
+               m->state_words[1]);
+        return;
+    }
+    bool before = m->mod_get_state(m);
+    m->mod_set_state(m, v);
+    printf("  [%3u.%03us] %s 주입: %s → %s\n", (unsigned)(m->now / 1000), (unsigned)(m->now % 1000), m->state_label,
+           m->state_words[before], m->state_words[v]);
+    step_now(m);
+}
+
 static void ask_and_set(ModCon *m, SigKey k)
 {
     char buf[128];
@@ -563,6 +587,17 @@ static bool exec_line(ModCon *m, char *line)
         return true;
     }
 
+    if (m->state_cmd && ieq(cmd, m->state_cmd)) {
+        char sb[64];
+        if (!a1) {
+            if (!read_line("  on(1) 또는 off(0)> ", sb, sizeof sb))
+                return false;
+            a1 = trim(sb);
+        }
+        set_state(m, a1);
+        return true;
+    }
+
     int k = find_sig(cmd);
     if (k >= 0) {
         int32_t v;
@@ -581,6 +616,12 @@ static bool exec_line(ModCon *m, char *line)
         int no = 0;
         for (int i = 0; i < K_COUNT; i++)
             if ((m->show & SIGS[i].show_bit) && ++no == n) { ask_and_set(m, (SigKey)i); return true; }
+        if (m->state_cmd && ++no == n) {
+            char sb[64];
+            if (read_line("  on(1) 또는 off(0)> ", sb, sizeof sb))
+                set_state(m, trim(sb));
+            return true;
+        }
     }
     printf("  ! 알 수 없는 입력: %s  (h 도움말)\n", cmd);
     return true;

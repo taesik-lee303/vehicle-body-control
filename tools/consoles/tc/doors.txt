@@ -107,6 +107,39 @@ speed 30
 resume vehicle
 e lock on
 
+# 직전 잠금 상태 주입 (lock on|off): 주행으로 잠그지 않고 전제 조건을 바로 만든다
+tc TC-D3-10 | D3 | 상태 전이(직전 유지, 상태 주입) | 처음부터 시동 ON, D, 속도 5에서 잠김 주입, 2초 | 잠김 유지 (15 미만은 직전 유지)
+r
+ign on
+gear d
+speed 5
+lock on
+t 2
+e lock on
+tc TC-D2-04 | D2 | 결정 테이블(기어 P, 상태 주입) | 이어서 기어 P | 풀림
+gear p
+e lock off
+tc TC-D2-05 | D2 | 결정 테이블(시동 OFF, 상태 주입) | 처음 상태(시동 OFF, 기어 P)에서 잠김 주입 | 그 시각에 풀림
+r
+lock on
+e lock off
+tc TC-D1-08 | D1 | 결정 테이블(상태 주입) | 처음부터 시동 ON, D, 속도 0, 차량 신호 끊기 0.5초 뒤 잠김 주입, 1초 | 수신 중단, 잠김 유지
+r
+ign on
+gear d
+speed 0
+cut vehicle
+t 0.5
+e rxlost yes
+lock on
+t 1
+e lock on
+tc TC-D1-09 | D1 | 결정 테이블(상태 주입) | 이어서 풀림 주입, 1초 | 수신 중단, 풀림 유지
+lock off
+t 1
+e rxlost yes
+e lock off
+
 tc TC-D-Q8-01 | (정의 없음) Q8 | Negative(기어 코드) | 시동 ON, 기어 코드 7, 속도 30 | 기어 코드 정의 안 됨 판정. 도어 동작은 관찰
 r
 ign on

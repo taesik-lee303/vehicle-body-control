@@ -55,6 +55,14 @@ struct ModCon {
     int32_t start_ign;  /* 시작값 (계기판·와이퍼는 유효한 속도 판정을 위해 시동·기어를 정해 둔다) */
     int32_t start_gear;
 
+    /* 직전 상태 주입 (선택). 사양서 입력이 아니라 모듈이 기억하는 직전 상태(예: 도어 잠금)를
+     * TC 전제 조건으로 바로 만든다. 넣은 뒤 그 시각에 바로 판단하므로, 규칙이 바꾸면 곧 바뀐다 */
+    const char *state_cmd;   /* 명령 이름 (예: "lock"). NULL이면 없음 */
+    const char *state_label; /* 메뉴 표시 (예: "직전 잠금 상태") */
+    const char *state_words[2]; /* 0, 1의 이름 (예: "풀림", "잠김") */
+    bool (*mod_get_state)(ModCon *m);
+    void (*mod_set_state)(ModCon *m, bool v); /* 상태와 그에 맞는 출력을 함께 바꾼다 */
+
     /* 지금 보내고 있는 원래 값 (코드 그대로) */
     int32_t ign, gear, speed, lux, rain;
     int32_t wiper_level;
