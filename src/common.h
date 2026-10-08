@@ -48,16 +48,19 @@ typedef struct {
     vbc_ms_t last_rx_ms; /* 마지막 수신 시각 */
 } Signal;
 
-/* 수신한 입력 원본 */
+/*
+ * 수신한 입력 원본. 모든 값은 들어온 코드 그대로 저장한다 (타입 변환으로 바꾸지 않는다).
+ * 실제 차량 신호에는 정의되지 않은 코드가 실릴 수 있으므로, 그 판정은 vbc_build_context()에서 드러낸다.
+ */
 typedef struct {
     Signal speed;    /* km/h */
-    Signal gear;     /* Gear */
-    Signal ignition; /* 0 = 꺼짐, 1 = 켜짐 */
+    Signal gear;     /* 코드: 0 P, 1 R, 2 N, 3 D (Gear). 그 밖의 코드도 그대로 */
+    Signal ignition; /* 코드: 0 꺼짐, 1 켜짐. 그 밖의 코드도 그대로 */
     Signal lux;      /* lux */
     Signal rain;     /* % */
-    bool door_open[DOOR_COUNT];
-    LightSwitch light_sw;
-    WiperSwitch wiper_sw;
+    int32_t door_open[DOOR_COUNT]; /* 코드: 0 닫힘, 1 열림. 그 밖의 코드도 그대로 */
+    int32_t light_sw;              /* 코드: 0 OFF, 1 AUTO, 2 ON (LightSwitch). 그 밖도 그대로 */
+    int32_t wiper_sw;              /* 코드: 0 OFF, 1 AUTO, 2 LOW, 3 HIGH (WiperSwitch). 그 밖도 그대로 */
 } VbcInputs;
 
 /*
@@ -69,10 +72,13 @@ typedef struct {
 
     /* C4: 속도·기어·시동 중 하나라도 0.5초 동안 안 들어옴 (첫 수신 전에는 시작부터 셈) */
     bool rx_lost;
-    /* 시동. C4 수신 중단이면 false (조명·와이퍼는 꺼진 것으로 봄). 첫 수신 전에도 false */
+    /* 시동. C4 수신 중단이면 false (조명·와이퍼는 꺼진 것으로 봄). 첫 수신 전에도 false.
+     * 원래 코드가 0이 아니면 켜짐으로 본다 — 정의 안 된 코드(예: 2)도 켜짐이 된다 (현재 동작, 질의 Q9) */
     bool ignition_on;
-    /* 기어. 첫 수신 전에는 GEAR_P로 둔다 (가정, docs/c-structure.md 참고) */
-    Gear gear;
+    /* 기어 코드 그대로. 첫 수신 전에는 GEAR_P로 둔다 (가정, docs/c-structure.md Q2).
+     * 정의 안 된 코드(예: 7)도 그대로 들어간다 → gear_valid 참고 (질의 Q8).
+     * enum이 아니라 int32_t: enum 변수는 음수 같은 정의 밖 값을 다른 숫자로 바꿔 담을 수 있어서 */
+    int32_t gear;
 
     /* C3: 속도·기어·시동 모두 0.5초 안에 들어왔고 속도가 0~250 */
     bool speed_valid;
@@ -87,10 +93,22 @@ typedef struct {
     bool rain_valid;
     int32_t rain;
 
-    bool door_open[DOOR_COUNT];
+    bool door_open[DOOR_COUNT]; /* 원래 코드가 0이 아니면 열림 (정의 안 된 코드 포함, 현재 동작, 질의 Q10) */
     bool any_door_open;
-    LightSwitch light_sw;
-    WiperSwitch wiper_sw;
+    int32_t light_sw; /* LightSwitch 코드 그대로 (정의 안 된 값 포함, gear와 같은 이유로 int32_t) */
+    int32_t wiper_sw; /* WiperSwitch 코드 그대로 (정의 안 된 값 포함) */
+
+    /*
+     * 정의된 코드인가 (사양서 3.1의 값 목록: 시동 켜짐/꺼짐, 기어 P/R/N/D, 도어 열림/닫힘, 스위치 값).
+     * 정의 안 된 코드를 받았을 때 무엇을 해야 하는지는 사양서에 없다 (질의 Q8~Q11).
+     * 그래서 지금은 판정만 드러내고, 모듈은 이 값을 쓰지 않는다 (동작은 바꾸지 않음).
+     * 아직 받은 적이 없는 신호는 true (C5 시작 상태와 같은 값을 쓰는 중).
+     */
+    bool ignition_valid;
+    bool gear_valid;
+    bool door_valid[DOOR_COUNT];
+    bool light_sw_valid;
+    bool wiper_sw_valid;
 } VbcContext;
 
 /* 출력. C5 초기값은 vbc_outputs_init() */
@@ -115,14 +133,14 @@ void vbc_outputs_init(VbcOutputs *out);
 
 /* ---- 입력 수신: now는 수신 시각 ---- */
 void vbc_rx_speed(VbcInputs *in, vbc_ms_t now, int32_t kmh);
-void vbc_rx_gear(VbcInputs *in, vbc_ms_t now, Gear gear);
-void vbc_rx_ignition(VbcInputs *in, vbc_ms_t now, bool on);
+void vbc_rx_gear(VbcInputs *in, vbc_ms_t now, int32_t gear_code);    /* Gear 값 또는 아무 코드 */
+void vbc_rx_ignition(VbcInputs *in, vbc_ms_t now, int32_t ign_code); /* 0 꺼짐, 1 켜짐 또는 아무 코드 */
 void vbc_rx_lux(VbcInputs *in, vbc_ms_t now, int32_t lux);
 void vbc_rx_rain(VbcInputs *in, vbc_ms_t now, int32_t percent);
 /* 도어와 스위치는 바뀔 때만 들어와도 된다 (주기 수신 대상 아님) */
-void vbc_set_door(VbcInputs *in, DoorId door, bool open);
-void vbc_set_light_switch(VbcInputs *in, LightSwitch sw);
-void vbc_set_wiper_switch(VbcInputs *in, WiperSwitch sw);
+void vbc_set_door(VbcInputs *in, DoorId door, int32_t code);  /* 0 닫힘, 1 열림 또는 아무 코드 */
+void vbc_set_light_switch(VbcInputs *in, int32_t code);         /* LightSwitch 값 또는 아무 코드 */
+void vbc_set_wiper_switch(VbcInputs *in, int32_t code);         /* WiperSwitch 값 또는 아무 코드 */
 
 /* ---- C2~C4 판정 ---- */
 /* 마지막 수신 후 0.5초가 지나지 않음 (C3) */

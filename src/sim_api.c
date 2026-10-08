@@ -23,6 +23,12 @@ static const char *const WIPER_SW[] = {"OFF", "AUTO", "LOW", "HIGH"};
 static const char *const WIPER_LV[] = {"stop", "int", "low", "high"};
 static const char *const WARN[] = {"none", "door", "lux", "rain"};
 
+/* 정의 안 된 코드도 배열 밖을 읽지 않게 */
+static const char *name_or(const char *const *names, int n, int32_t v)
+{
+    return v >= 0 && v < n ? names[v] : "INVALID";
+}
+
 API void sim_init(int quiet)
 {
     console_init(&g_con, quiet ? NULL : stdout);
@@ -56,7 +62,7 @@ API const char *sim_state(void)
     const Panel *p = &c->panel;
     const VbcContext *x = &c->sys.ctx;
     const VbcOutputs *o = &c->sys.out;
-    const bool *d = c->sys.in.door_open;
+    const int32_t *d = c->sys.in.door_open;
 
     snprintf(g_json, sizeof g_json,
              "{\"t\":%u,"
@@ -70,8 +76,8 @@ API const char *sim_state(void)
              (unsigned)c->now,
              p->ignition, vbc_gear_name(p->gear), (int)p->speed,
              (int)(c->drive_on ? c->drive.speed_mkmh : p->speed * 1000), (int)p->lux, (int)p->rain,
-             d[DOOR_FL], d[DOOR_FR], d[DOOR_RL], d[DOOR_RR],
-             LIGHT_SW[c->sys.in.light_sw], WIPER_SW[c->sys.in.wiper_sw], p->cut, c->drive_on,
+             (int)d[DOOR_FL], (int)d[DOOR_FR], (int)d[DOOR_RL], (int)d[DOOR_RR],
+             name_or(LIGHT_SW, 3, c->sys.in.light_sw), name_or(WIPER_SW, 4, c->sys.in.wiper_sw), p->cut, c->drive_on,
              (int)c->drive.throttle, c->drive.brake,
              x->rx_lost, x->ignition_on, x->speed_valid, x->lux_fault, x->rain_fault,
              o->headlight_on, o->lux_fault_lamp, WIPER_LV[o->wiper], o->rain_fault_lamp,

@@ -102,3 +102,7 @@ feature/core, feature/lighting, feature/wipers, feature/doors, feature/dashboard
 | Q5 | 범위 밖 속도 | 유효한 속도 아님(C3), 수신 중단(C4)은 아님 | C4는 "들어오지 않으면"만 해당 |
 | Q6 | 스위치 초기 위치 | 조명 OFF, 와이퍼 OFF | 사양서에 없음. 시동이 꺼져 있어 C5 출력에는 영향 없음 |
 | Q7 | 시간 판정 간격 | `vbc_step()`을 50ms 이하 간격 또는 입력 변화마다 호출 | 조건 변화는 step 시점에만 관측됨 |
+| Q8 | 기어 코드가 P/R/N/D가 아님 | 판정만 드러냄(`ctx->gear_valid`). 도어는 "P 아님"으로 취급 → 정차해도 안 풀릴 수 있음 | 사양서 3.1은 유효 값만 정함. `docs/test/README.md` 5절 |
+| Q9 | 시동 코드가 0/1이 아님 | `ctx->ignition_valid`로 드러냄. 0이 아니면 켜짐으로 봄 | 같음 |
+| Q10 | 도어 코드가 0/1이 아님 | `ctx->door_valid[]`로 드러냄. 0이 아니면 열림으로 봄 | 같음 |
+| Q11 | 조명 스위치 코드가 정의 밖 | `ctx->light_sw_valid`로 드러냄. 조명은 L2·L3 판단 안 하고 L6만 적용 (일관성 없음). 와이퍼 스위치는 팀 요구 SWR-W4-005(마지막 정상 값) | 같음 |

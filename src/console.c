@@ -541,7 +541,7 @@ void console_print_status(const Console *c)
     const Panel *p = &c->panel;
     const VbcContext *x = &c->sys.ctx;
     const VbcOutputs *o = &c->sys.out;
-    const bool *door = c->sys.in.door_open;
+    const int32_t *door = c->sys.in.door_open;
 
     say(c, "  시각 %u.%03us\n", sec_part(c->now), ms_part(c->now));
     say(c, "  [입력] 시동 %s  기어 %s  속도 %dkm/h  조도 %dlux  강우 %d%%\n",
@@ -549,7 +549,7 @@ void console_print_status(const Console *c)
     say(c, "         도어 FL:%s FR:%s RL:%s RR:%s  조명SW %s  와이퍼SW %s\n",
         door[DOOR_FL] ? "열림" : "닫힘", door[DOOR_FR] ? "열림" : "닫힘",
         door[DOOR_RL] ? "열림" : "닫힘", door[DOOR_RR] ? "열림" : "닫힘",
-        light_sw_name(c->sys.in.light_sw), wiper_sw_name(c->sys.in.wiper_sw));
+        light_sw_name((LightSwitch)c->sys.in.light_sw), wiper_sw_name((WiperSwitch)c->sys.in.wiper_sw));
     if (p->cut) {
         say(c, "         송신 중단:%s%s%s%s%s\n",
             p->cut & CON_SPEED ? " speed" : "", p->cut & CON_GEAR ? " gear" : "",

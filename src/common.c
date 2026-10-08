@@ -39,19 +39,19 @@ void vbc_outputs_init(VbcOutputs *out)
 }
 
 void vbc_rx_speed(VbcInputs *in, vbc_ms_t now, int32_t kmh) { signal_rx(&in->speed, now, kmh); }
-void vbc_rx_gear(VbcInputs *in, vbc_ms_t now, Gear gear) { signal_rx(&in->gear, now, (int32_t)gear); }
-void vbc_rx_ignition(VbcInputs *in, vbc_ms_t now, bool on) { signal_rx(&in->ignition, now, on ? 1 : 0); }
+void vbc_rx_gear(VbcInputs *in, vbc_ms_t now, int32_t gear_code) { signal_rx(&in->gear, now, gear_code); }
+void vbc_rx_ignition(VbcInputs *in, vbc_ms_t now, int32_t ign_code) { signal_rx(&in->ignition, now, ign_code); }
 void vbc_rx_lux(VbcInputs *in, vbc_ms_t now, int32_t lux) { signal_rx(&in->lux, now, lux); }
 void vbc_rx_rain(VbcInputs *in, vbc_ms_t now, int32_t percent) { signal_rx(&in->rain, now, percent); }
 
-void vbc_set_door(VbcInputs *in, DoorId door, bool open)
+void vbc_set_door(VbcInputs *in, DoorId door, int32_t code)
 {
     if (door < DOOR_COUNT)
-        in->door_open[door] = open;
+        in->door_open[door] = code;
 }
 
-void vbc_set_light_switch(VbcInputs *in, LightSwitch sw) { in->light_sw = sw; }
-void vbc_set_wiper_switch(VbcInputs *in, WiperSwitch sw) { in->wiper_sw = sw; }
+void vbc_set_light_switch(VbcInputs *in, int32_t code) { in->light_sw = code; }
+void vbc_set_wiper_switch(VbcInputs *in, int32_t code) { in->wiper_sw = code; }
 
 /* C3: "마지막으로 들어온 지 0.5초가 지나지 않았고" → 경과 < 500ms */
 bool vbc_signal_fresh(const Signal *s, vbc_ms_t now)
@@ -89,7 +89,7 @@ void vbc_build_context(const VbcInputs *in, vbc_ms_t now, VbcContext *ctx)
                 || vbc_signal_timed_out(&in->ignition, now);
 
     ctx->ignition_on = !ctx->rx_lost && in->ignition.received && in->ignition.value != 0;
-    ctx->gear = in->gear.received ? (Gear)in->gear.value : GEAR_P;
+    ctx->gear = in->gear.received ? in->gear.value : GEAR_P;
 
     /* C3 */
     ctx->speed_valid = vbc_signal_fresh(&in->speed, now)
@@ -105,12 +105,19 @@ void vbc_build_context(const VbcInputs *in, vbc_ms_t now, VbcContext *ctx)
                  &ctx->rain_fault, &ctx->rain_valid, &ctx->rain);
 
     for (int i = 0; i < DOOR_COUNT; i++) {
-        ctx->door_open[i] = in->door_open[i];
-        if (in->door_open[i])
+        ctx->door_open[i] = in->door_open[i] != 0;   /* 현재 동작: 0이 아니면 열림 (Q10) */
+        ctx->door_valid[i] = in_range(in->door_open[i], 0, 1);
+        if (ctx->door_open[i])
             ctx->any_door_open = true;
     }
     ctx->light_sw = in->light_sw;
     ctx->wiper_sw = in->wiper_sw;
+
+    /* 정의된 코드인가 (사양서 3.1). 판정만 드러내고 동작은 바꾸지 않는다 (Q8~Q11) */
+    ctx->ignition_valid = !in->ignition.received || in_range(in->ignition.value, 0, 1);
+    ctx->gear_valid = !in->gear.received || in_range(in->gear.value, GEAR_P, GEAR_D);
+    ctx->light_sw_valid = in_range(in->light_sw, LIGHT_SW_OFF, LIGHT_SW_ON);
+    ctx->wiper_sw_valid = in_range(in->wiper_sw, WIPER_SW_OFF, WIPER_SW_HIGH);
 }
 
 /* C1 */

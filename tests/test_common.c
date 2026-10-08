@@ -201,6 +201,69 @@ TEST(c1_hold_timer_boundary_and_restart)
     CHECK_EQ(hold_timer_update(&t, 3600, true, 1000), true);
 }
 
+/* ---- 정의된 코드 판정 (사양서 3.1 값 목록). 정의 안 된 코드일 때의 처리는 질의 Q8~Q11이라 판정만 확인 ---- */
+
+TEST(code_validity_ignition_gear)
+{
+    VbcInputs in;
+    VbcContext ctx;
+    vbc_inputs_init(&in);
+
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.ignition_valid, true); /* 아직 안 받음 */
+    CHECK_EQ(ctx.gear_valid, true);
+
+    int32_t ign_ok[] = {0, 1}, ign_bad[] = {-1, 2, 255};
+    for (int i = 0; i < 2; i++) { vbc_rx_ignition(&in, 0, ign_ok[i]); vbc_build_context(&in, 0, &ctx); CHECK_EQ(ctx.ignition_valid, true); }
+    for (int i = 0; i < 3; i++) { vbc_rx_ignition(&in, 0, ign_bad[i]); vbc_build_context(&in, 0, &ctx); CHECK_EQ(ctx.ignition_valid, false); }
+
+    int32_t gear_ok[] = {GEAR_P, GEAR_R, GEAR_N, GEAR_D}, gear_bad[] = {-1, 4, 7};
+    for (int i = 0; i < 4; i++) { vbc_rx_gear(&in, 0, gear_ok[i]); vbc_build_context(&in, 0, &ctx); CHECK_EQ(ctx.gear_valid, true); }
+    for (int i = 0; i < 3; i++) { vbc_rx_gear(&in, 0, gear_bad[i]); vbc_build_context(&in, 0, &ctx); CHECK_EQ(ctx.gear_valid, false); }
+
+    vbc_rx_gear(&in, 0, 7);
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.gear, 7); /* 원래 코드가 바뀌지 않고 모듈까지 전달된다 */
+}
+
+TEST(code_validity_doors_switches)
+{
+    VbcInputs in;
+    VbcContext ctx;
+    vbc_inputs_init(&in);
+
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.door_valid[DOOR_FL], true);
+    CHECK_EQ(ctx.light_sw_valid, true);
+    CHECK_EQ(ctx.wiper_sw_valid, true);
+
+    vbc_set_door(&in, DOOR_RR, 1);
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.door_valid[DOOR_RR], true);
+    vbc_set_door(&in, DOOR_RR, 2);
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.door_valid[DOOR_RR], false);
+    CHECK_EQ(ctx.door_valid[DOOR_FL], true);
+
+    vbc_set_light_switch(&in, LIGHT_SW_ON);
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.light_sw_valid, true);
+    vbc_set_light_switch(&in, 3);
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.light_sw_valid, false);
+    vbc_set_light_switch(&in, -1);
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.light_sw_valid, false);
+    CHECK_EQ(ctx.light_sw, -1); /* 원래 코드 그대로 */
+
+    vbc_set_wiper_switch(&in, WIPER_SW_HIGH);
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.wiper_sw_valid, true);
+    vbc_set_wiper_switch(&in, 4);
+    vbc_build_context(&in, 0, &ctx);
+    CHECK_EQ(ctx.wiper_sw_valid, false);
+}
+
 int main(void)
 {
     printf("== C1~C5 공통 규칙\n");
@@ -214,5 +277,7 @@ int main(void)
     RUN(c4_any_vehicle_signal_lost_means_ignition_off);
     RUN(c4_lux_or_rain_loss_is_not_rx_lost);
     RUN(c1_hold_timer_boundary_and_restart);
+    RUN(code_validity_ignition_gear);
+    RUN(code_validity_doors_switches);
     return test_summary();
 }
