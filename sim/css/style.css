@@ -58,6 +58,13 @@ select { background: #0b0d12; border: 1px solid var(--line); border-radius: 4px;
 #log .err { color: var(--warn); }
 #log .comment, #log .info { color: var(--dim); }
 
+/* ---- 미니맵 (이벤트 로그 아래) ---- */
+#minimap { position: fixed; top: calc(42vh + 22px); right: 12px; padding: 6px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); backdrop-filter: blur(6px); }
+#minimap canvas { display: block; border-radius: 5px; }
+#minimap .mm-cap { margin-top: 4px; font-variant-numeric: tabular-nums; }
+#minimap .mm-attr { color: var(--dim); font-size: 10px; }
+
 /* ---- 계기판 (하단) ---- */
 #hud { position: fixed; left: 50%; bottom: 12px; transform: translateX(-50%); width: min(920px, calc(100vw - 24px));
   background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 10px 16px;
@@ -93,4 +100,6 @@ select { background: #0b0d12; border: 1px solid var(--line); border-radius: 4px;
 @media (max-width: 900px) {
   #log-panel { top: auto; bottom: 150px; height: 28vh; width: calc(100vw - 24px); left: 12px; right: 12px; }
   #toolbox { max-height: 40vh; }
+  #minimap { top: 12px; padding: 4px 6px; }       /* 좁은 화면: 그림은 빼고 도로 이름·출처만 */
+  #minimap canvas { display: none; }
 }

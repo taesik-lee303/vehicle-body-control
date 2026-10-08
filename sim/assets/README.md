@@ -11,6 +11,24 @@
 
 다시 받기: `sim/tools/fetch-assets.sh`. 차, 나무, 가로등, 가드레일은 코드로 만듭니다 (`sim/js/scene/car.js`, `road.js`).
 
+## 지도 (map/)
+| 파일 | 원본 | 쓰는 곳 |
+|---|---|---|
+| `map/sejong.json` | [OpenStreetMap](https://www.openstreetmap.org/copyright) 세종대학교 주변 도로·건물·녹지 (© OpenStreetMap contributors, **ODbL 1.0**) | 실제 도로 장면 (`sim/js/scene/city.js`), 미니맵 |
+| (같은 파일의 `terrain`) | [AWS Terrain Tiles](https://registry.opendata.aws/terrain-tiles/) Terrarium z15 (SRTM 기반 공개 고도 자료) | 지형 높이 |
+
+- **출처 표시 의무**가 있습니다. 화면 미니맵 아래에 `© OpenStreetMap contributors`가 항상 표시되며, 이 줄을 지우지 않습니다.
+- 주행 경로(자동 주행용): 능동로(세종대 앞) → 광나루로 → 군자로 → 천호대로(군자역) → 능동로, 한 바퀴 약 2.9 km. 일방통행을 지키는 순환로를 도구가 자동으로 찾습니다.
+- 다시 만들기 (인터넷 필요, Overpass API + 고도 타일): `python3 sim/tools/fetch-map.py`. 서버가 바쁘면 504가 나므로 도구가 다른 서버로 몇 번 다시 시도합니다.
+  `--cache DIR`을 주면 받은 원본을 저장해 두고 다음에는 다시 받지 않습니다.
+- **지형**: 고도 자료가 건물·나무 꼭대기까지 잰 표면 높이라, 반경 50 m보다 작은 솟은 부분을 깎고(열림 연산) 25 m로 평활화했습니다. 해상도가 약 30 m라 높이 오차가 수 m 있습니다. 높이는 출발점 = 0 m 기준입니다.
+- **건물 높이**: 우선순위는 `sim/tools/map-overrides.json`(팀 보정) > OSM `height` > OSM `building:levels` > 건물 종류별 기본값입니다.
+  세종대 건물은 OSM에 층수가 있는 것이 4개(광개토관 15층, 동천관 10층, 김원관 6층, 이당관 2층)뿐입니다. 나머지는 실제 지상 층수를 보정 파일의 `levels`에 적고 도구를 다시 실행하세요.
+  `python3 sim/tools/fetch-map.py --campus`로 캠퍼스 건물과 층수 출처를 볼 수 있습니다. 외벽은 실제 모양이 아니라 공통 창 무늬입니다.
+- 지하차도·터널은 뺐습니다. 나무·가로등 위치는 실제 위치가 아닙니다.
+- 직접 운전의 충돌 판정은 건물 바닥 외곽선과 지도 끝만 봅니다 (나무·가로등·연석은 통과).
+- URL `?map=straight`면 예전 직선 도로, `?at=1200`이면 경로의 1.2 km 지점에서 출발합니다.
+
 ## 실사 차 모델 넣기 (선택)
 `sim/assets/car.glb`가 있으면 코드로 만든 차 대신 그 모델을 씁니다. 없으면 코드 모델이 그대로 나옵니다.
 URL `?car=code`는 항상 코드 모델, `?car=glb`는 glb가 없을 때 이벤트 로그에 알려 줍니다.

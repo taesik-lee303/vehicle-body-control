@@ -1,0 +1,29 @@
+{
+  "설명": "세종대 건물 높이 보정. OSM에 층수가 없는 건물은 종류별 기본값으로 그려진다. 실제 지상 층수를 levels에 적고 python3 sim/tools/fetch-map.py 를 다시 실행하면 반영된다. levels 대신 height(m)를 적으면 그 값을 그대로 쓴다. null은 '모름'(기본값 사용). 이름은 OSM의 name과 같아야 한다 (python3 sim/tools/fetch-map.py --campus 로 목록 확인).",
+  "buildings": {
+    "광개토관": { "levels": 15, "OSM": "15층" },
+    "동천관 학술정보원": { "levels": 10, "OSM": "10층" },
+    "김원관": { "levels": 4, "OSM": "6층" },
+    "이당관": { "levels": 2, "OSM": "2층" },
+    "군자관": { "levels": 6 },
+    "다산관": { "levels": 4 },
+    "대양AI센터": { "levels": 12 },
+    "대양홀": { "levels": 3 },
+    "모짜르트홀": { "levels": 2 },
+    "박물관": { "levels": 5 },
+    "별관 평생교육원": { "levels": 2 },
+    "세종관": { "levels": 4 },
+    "애지헌": { "levels": 1 },
+    "영실관": { "levels": 6 },
+    "용덕관": { "levels": 4 },
+    "우정당": { "levels": 3 },
+    "율곡관": { "levels": 2 },
+    "주차빌딩": { "levels": 5 },
+    "주차타워": { "levels": 8 },
+    "진관홀": { "levels": 7 },
+    "집현관": { "levels": 10 },
+    "충무관": { "levels": 8 },
+    "학생회관": { "levels": 6 },
+    "홍진구조실험센터": { "levels": 1 }
+  }
+}

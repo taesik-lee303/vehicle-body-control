@@ -13,7 +13,7 @@ const DASH_PERIOD = 20, DASH_LEN = 8;           // 흰 점선 (8m 칠, 12m 빈�
 const POST_PERIOD = 4, LAMP_PERIOD = 50;
 const TREE_NEAR = 40, TREE_FAR = -560;          // 나무가 도는 z 범위
 
-function tex(loader, url, repeatX, repeatY, srgb) {
+export function tex(loader, url, repeatX, repeatY, srgb) {
   const t = loader.load(url);
   t.wrapS = t.wrapT = THREE.RepeatWrapping;
   t.repeat.set(repeatX, repeatY);
@@ -42,7 +42,7 @@ function blotchTexture() {
 }
 
 // 차선 무늬: 칠이 조금 닳은 흰색/노란색. dash면 앞부분만 칠
-function lineTexture(dashFrac) {
+export function lineTexture(dashFrac) {
   const cv = document.createElement('canvas');
   cv.width = 32; cv.height = 512;
   const g = cv.getContext('2d');
@@ -58,7 +58,7 @@ function lineTexture(dashFrac) {
 }
 
 // 빛 웅덩이·반사 줄기용 부드러운 원
-function glowTexture() {
+export function glowTexture() {
   const cv = document.createElement('canvas');
   cv.width = cv.height = 128;
   const g = cv.getContext('2d');
@@ -69,7 +69,7 @@ function glowTexture() {
 }
 
 // 나뭇잎 덩어리 (알파로 잘라 쓰는 카드)
-function leafTexture(conifer) {
+export function leafTexture(conifer) {
   const cv = document.createElement('canvas');
   cv.width = cv.height = 256;
   const g = cv.getContext('2d');
@@ -104,7 +104,7 @@ function card(size, pos, rot, center) {
   return geo;
 }
 
-function makeTreePrototype(kind, seed) {
+export function makeTreePrototype(kind, seed) {
   const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
   const leaves = [], wood = [];
   if (kind === 'conifer') {
@@ -144,7 +144,7 @@ function makeTreePrototype(kind, seed) {
 }
 
 // 가로등 (현대식 LED). 원점은 기둥 밑
-function makeLamp(metal, headMat) {
+export function makeLamp(metal, headMat) {
   const g = new THREE.Group();
   const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.13, 9.5, 12), metal);
   pole.position.y = 4.75;

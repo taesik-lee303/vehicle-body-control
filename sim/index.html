@@ -98,6 +98,12 @@
   <div id="log"></div>
 </section>
 
+<section id="minimap" hidden>
+  <canvas></canvas>
+  <div class="mm-cap"></div>
+  <div class="mm-attr"></div>
+</section>
+
 <footer id="hud"></footer>
 
 <div id="help" hidden>
@@ -106,7 +112,7 @@
     <tr><td><kbd>↑</kbd></td><td>가속 (보통)</td></tr>
     <tr><td><kbd>Shift</kbd></td><td>강한 가속 (풀 스로틀)</td></tr>
     <tr><td><kbd>↓</kbd></td><td>브레이크 (가속과 같이 누르면 브레이크 우선, R4)</td></tr>
-    <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>차선 안에서 좌우 이동 (화면 연출, 코어로 보내지 않음)</td></tr>
+    <tr><td><kbd>←</kbd> <kbd>→</kbd></td><td>핸들 (주행 모드에서 직접 운전. 손을 떼면 가운데로, 빠를수록 덜 꺾임). 화면에서만 쓰고 코어로 보내지 않음</td></tr>
     <tr><td><kbd>I</kbd></td><td>시동 켜기/끄기 (정지 상태에서만, R1)</td></tr>
     <tr><td><kbd>P</kbd> <kbd>R</kbd> <kbd>N</kbd> <kbd>D</kbd></td><td>기어 (정지 상태에서만, R2)</td></tr>
     <tr><td><kbd>L</kbd> / <kbd>W</kbd></td><td>조명 스위치 / 와이퍼 스위치 순환</td></tr>
@@ -118,6 +124,9 @@
   </table>
   <p>시간은 시뮬레이션 시각입니다. 일시정지 중에는 시각이 흐르지 않아 수신 중단(C4)도 생기지 않습니다.
   전조등·와이퍼·잠금·경고는 모두 C 코어(<code>vbc_step</code>)의 출력을 그대로 그립니다.</p>
+  <p>도로는 세종대학교 주변 실제 도로와 지형입니다. 주행 모드에서는 핸들을 직접 돌려야 커브·교차로를 돌고, 건물에 부딪히면 멈출 때까지 브레이크가 걸립니다(후진 <kbd>R</kbd>으로 빠져나오기).
+  속도를 직접 입력하거나 시나리오를 재생하면 순환로(능동로 → 광나루로 → 군자로 → 천호대로, 약 2.9 km)를 자동으로 따라갑니다.
+  지도 데이터 © OpenStreetMap contributors. 주소 끝에 <code>?map=straight</code>를 붙이면 예전 직선 도로입니다.</p>
   <p class="dim">H 또는 Esc로 닫기</p>
 </div>
 

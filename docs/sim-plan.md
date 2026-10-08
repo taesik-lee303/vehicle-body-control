@@ -93,7 +93,10 @@
 | `sim/js/core-wasm.js`, `sim/js/core-ws.js` | 전송 계층. 같은 인터페이스 `{init, exec, advance, state, onLog}` |
 | `sim/js/input.js` | 키보드 → 명령. 키가 바뀔 때만 `pedal` 전송, 창 포커스 잃으면 `pedal 0 0` |
 | `sim/js/toolbox.js`, `sim/js/hud.js`, `sim/js/scenario.js` | 툴박스, 계기판, 시나리오 재생 |
-| `sim/js/scene/world.js, sky.js, road.js, car.js, car-gltf.js, loft.js` | 장면 조립·비·카메라 4종·블룸·화질 / HDRI 하늘과 반사 환경 / 노면·차선·가드레일·가로등·나무 / 코드로 만든 곡면 차 / car.glb 어댑터 / 곡면 생성 |
+| `sim/js/scene/world.js, sky.js, road.js, car.js, car-gltf.js, loft.js` | 장면 조립·비·카메라 4종·블룸·화질 / HDRI 하늘과 반사 환경 / 직선 도로(`?map=straight`)의 노면·차선·가드레일·가로등·나무 / 코드로 만든 곡면 차 / car.glb 어댑터 / 곡면 생성 |
+| `sim/js/scene/city.js`, `sim/js/minimap.js` | 실제 도로 장면(기본): 지도 JSON으로 지형·노면·차선·횡단보도·보도·건물·공원·가로수·가로등을 만들고, 건물 충돌·도로 이름·땅 높이를 알려 줌 / 미니맵과 OSM 출처 표시 |
+| `sim/tools/fetch-map.py` → `sim/assets/map/sejong.json`, `sim/tools/map-overrides.json` | OpenStreetMap(세종대 주변) 도로·건물·녹지와 공개 고도 자료를 받아 변환하고, 일방통행을 지키는 순환 경로를 찾음. 세종대 건물 층수 보정 (`sim/assets/README.md` 지도 절) |
+| 직접 운전 / 자동 주행 (`world.js`) | 주행 모드: `←` `→`가 핸들(자전거 모형, 옆 가속도 0.45g 이하가 되게 빠를수록 덜 꺾임), 건물·지도 끝에 막히면 `pedal 0 1`을 보내 멈춤(R4 경로, C 변경 없음). 속도 직접 입력·시나리오 재생: 순환로 자동 주행. 속도는 언제나 C 코어 값 |
 | `sim/vendor/three/` | three.module.js + addons(GLTFLoader, DRACOLoader, RGBELoader, EffectComposer, UnrealBloomPass, OutputPass, RoundedBoxGeometry) 로컬 복사 (`sim/tools/fetch-vendor.sh`). 발표장 인터넷 불필요 |
 | `sim/assets/` | HDRI 3장(낮·흐림·밤), 노면·풀밭 텍스처 (Poly Haven CC0, `sim/tools/fetch-assets.sh`). 선택: `car.glb`. 출처·라이선스·노드 이름 규칙은 `sim/assets/README.md` |
 | `tests/test_drive.c`, `scenarios/R1_*.txt … R5_*.txt` | R1~R5 증명 |

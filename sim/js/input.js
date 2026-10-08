@@ -1,5 +1,6 @@
 // input.js - 키보드 → 콘솔 명령. 페달은 키 상태가 바뀔 때만 보낸다 (drive.c가 상태를 기억).
-// ←→는 화면 연출(차선 안 좌우 이동)이라 코어로 보내지 않는다 (사양서에 조향 입력 없음).
+// ←→는 화면에서만 쓰는 핸들이라 코어로 보내지 않는다 (사양서에 조향 입력 없음).
+// 실제 도로 지도에서 직접 운전하면 핸들, 자동 주행·직선 도로에서는 차로 안 좌우 이동.
 
 const LIGHT = ['off', 'auto', 'on'];
 const WIPER = ['off', 'auto', 'low', 'high'];
@@ -15,11 +16,12 @@ function isTyping(el) {
 export function setupInput({ exec, sendQuiet, getState, actions }) {
   const keys = new Set();
   let lastPedal = '';
+  let forceBrake = false;   // 건물에 부딪혔을 때: 멈출 때까지 가속을 무시하고 브레이크를 밟은 것으로
 
   function updatePedal() {
     if (!getState().in.drive) { lastPedal = ''; return; }    // 주행 모드가 아니면 페달 없음
-    const throttle = keys.has('Shift') ? 2 : keys.has('ArrowUp') ? 1 : 0;
-    const brake = keys.has('ArrowDown') ? 1 : 0;
+    const throttle = forceBrake ? 0 : keys.has('Shift') ? 2 : keys.has('ArrowUp') ? 1 : 0;
+    const brake = forceBrake || keys.has('ArrowDown') ? 1 : 0;
     const cmd = `pedal ${throttle} ${brake}`;
     if (cmd !== lastPedal) { sendQuiet(cmd); lastPedal = cmd; }
   }
@@ -58,5 +60,6 @@ export function setupInput({ exec, sendQuiet, getState, actions }) {
   return {
     lateral: () => (keys.has('ArrowRight') ? 1 : 0) - (keys.has('ArrowLeft') ? 1 : 0),
     resync: () => { lastPedal = ''; updatePedal(); },  // 리셋·주행 모드 전환 뒤 페달 상태를 다시 보냄
+    setForceBrake(on) { if (on !== forceBrake) { forceBrake = on; updatePedal(); } },
   };
 }
