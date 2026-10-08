@@ -65,6 +65,43 @@
       </div>
     </div>
 
+    <div class="group adas">
+      <div class="label">Stop &amp; Go <output id="sg-state">꺼짐</output></div>
+      <div class="seg">
+        <button id="sg-sw" title="G">스위치</button><button data-sg="set" title="S">SET</button><button data-sg="res" title="F">RES</button>
+        <button data-sg="down" title="-">−10</button><button data-sg="up" title="=">+10</button>
+      </div>
+      <div class="seg" id="sg-gap"><span class="mini">차간</span><button data-gap="1">1.0s</button><button data-gap="2">1.5s</button><button data-gap="3">2.0s</button></div>
+    </div>
+
+    <div class="group adas">
+      <div class="label">교통 장면</div>
+      <div class="seg">
+        <button data-scene="jam">정체 행렬</button><button data-scene="cutin">끼어들기</button><button data-scene="ped">보행자 횡단</button>
+        <button data-scene="bridge">육교·맨홀</button><button data-scene="clear">지우기</button>
+      </div>
+      <div class="seg"><span class="mini">앞차</span><button data-lead="stop">멈춤</button><button data-lead="go">출발 30</button><button data-lead="slow">10 km/h</button></div>
+    </div>
+
+    <div class="group adas">
+      <div class="label">레이더 고장 주입</div>
+      <div class="radar-faults">
+        <label>FR <select data-radar="fr"></select></label>
+        <label>FCL <select data-radar="fcl"></select></label>
+        <label>FCR <select data-radar="fcr"></select></label>
+      </div>
+    </div>
+
+    <div class="group adas">
+      <div class="label">레이더 표시</div>
+      <div class="checks">
+        <label><input type="checkbox" data-show="points" checked> 검출점</label>
+        <label><input type="checkbox" data-show="fov" checked> 시야</label>
+        <label><input type="checkbox" data-show="tracks" checked> 트랙</label>
+        <label><input type="checkbox" data-show="panel" checked> 맵 패널</label>
+      </div>
+    </div>
+
     <div class="group">
       <div class="label">시간</div>
       <div class="seg">
@@ -98,6 +135,12 @@
   <div id="log"></div>
 </section>
 
+<section id="radar-panel" hidden>
+  <header><strong>전방 맵</strong><span class="chips"></span></header>
+  <canvas></canvas>
+  <div class="foot"></div>
+</section>
+
 <footer id="hud"></footer>
 
 <div id="help" hidden>
@@ -115,9 +158,15 @@
     <tr><td><kbd>[</kbd> <kbd>]</kbd></td><td>배속 0.25 · 0.5 · 1 · 2</td></tr>
     <tr><td><kbd>C</kbd></td><td>카메라: 추적 → 정면 → 위 → 측면</td></tr>
     <tr><td><kbd>Tab</kbd> / <kbd>H</kbd></td><td>툴박스 접기 / 이 도움말</td></tr>
+    <tr><td><kbd>G</kbd></td><td>Stop &amp; Go 스위치 (XS1)</td></tr>
+    <tr><td><kbd>S</kbd> / <kbd>F</kbd></td><td>SET (지금 속도로 작동) / RES (재출발, 이전 설정으로 작동)</td></tr>
+    <tr><td><kbd>-</kbd> <kbd>=</kbd> / <kbd>V</kbd></td><td>설정 속도 −10 / +10 km/h, 차간 시간 1.0 → 1.5 → 2.0 s</td></tr>
   </table>
   <p>시간은 시뮬레이션 시각입니다. 일시정지 중에는 시각이 흐르지 않아 수신 중단(C4)도 생기지 않습니다.
   전조등·와이퍼·잠금·경고는 모두 C 코어(<code>vbc_step</code>)의 출력을 그대로 그립니다.</p>
+  <p>레이더 3개(FR 4D 이미징, FCL·FCR 전방 측면)는 센서 모델(가상 하드웨어)이 장면을 보고 검출점 프레임을 만들고,
+  C 코어의 맵이 점을 군집·추적해 선행 차량을 고릅니다. Stop &amp; Go는 그 맵으로 서고 출발합니다 (exp/radar-stop-and-go).
+  하늘색·연두·주황 점 = FR·FCL·FCR 검출점, 노란 상자 = 선행 차량, 빨강 = 경로 안 장애물, 회색 = 무시(육교·맨홀).</p>
   <p class="dim">H 또는 Esc로 닫기</p>
 </div>
 

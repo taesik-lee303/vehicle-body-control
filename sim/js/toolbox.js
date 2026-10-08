@@ -10,7 +10,10 @@ const CUT_BITS = { lux: 8, rain: 16, vehicle: 7 };   // console.h CON_* 와 같�
 export const luxFromSlider = (x) => (x <= 0 ? 0 : Math.round(10 ** ((x / 1000) * Math.log10(LUX_MAX + 1)) - 1));
 export const sliderFromLux = (lux) => Math.round((Math.log10(Math.max(0, Math.min(LUX_MAX, lux)) + 1) / Math.log10(LUX_MAX + 1)) * 1000);
 
-export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios }) {
+const RADAR_MODES = [['ok', '정상'], ['cut', '끊김'], ['repeat', '프레임 반복'], ['stuck', '값 고착'], ['block', '가림']];
+const SG_KO = { off: '꺼짐', standby: '대기', active: '작동', hold: '정지 유지', wait: '재출발 대기' };
+
+export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas = () => null, getRadarShow = () => ({}) }) {
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => [...document.querySelectorAll(sel)];
   const root = $('#toolbox');
@@ -83,12 +86,80 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios }) {
   $('#scenario-play').addEventListener('click', () => select.value && scenarios.play(select.value));
   $('#scenario-stop').addEventListener('click', scenarios.stop);
 
+  // ---- 레이더·Stop & Go (exp/radar-stop-and-go) ----
+  $$('[data-radar]').forEach((sel) => {
+    sel.innerHTML = RADAR_MODES.map(([v, t]) => `<option value="${v}">${t}</option>`).join('');
+    sel.addEventListener('change', () => { exec(`radar ${sel.dataset.radar} ${sel.value}`); sel.blur(); });
+  });
+  $('#sg-sw').addEventListener('click', () => { const a = getAdas(); exec(`sg ${a && a.sg.sw ? 'off' : 'on'}`); });
+  $$('[data-sg]').forEach((b) => b.addEventListener('click', () => exec(`sg ${b.dataset.sg}`)));
+  $$('[data-gap]').forEach((b) => b.addEventListener('click', () => exec(`sg gap ${b.dataset.gap}`)));
+
+  // 교통 장면: 지금 자차 위치 기준으로 물체를 놓는다 (요구사항 8.4 obj 명령)
+  const pending = [];   // { t: 시뮬 시각 ms, run }
+  let simT = 0;
+  const later = (ms, run) => pending.push({ t: simT + ms, run });
+  const newestId = () => (getAdas()?.objs || []).reduce((m, o) => Math.max(m, o[0]), 0);
+  const laneLead = () => {
+    let best = null;
+    for (const o of getAdas()?.objs || []) {
+      const [, kind, x0, y] = o;
+      if ((kind === 'car' || kind === 'truck') && Math.abs(y) < 1.3 && x0 > 0 && (!best || x0 < best[2])) best = o;
+    }
+    return best;
+  };
+  const SCENES = {
+    jam() {
+      exec('obj clear');
+      for (const c of ['car 18 0 30', 'car 31 0 30', 'truck 44 0 30', 'car 12 -3.6 33', 'car 36 -3.6 31', 'car 120 3.6 -40'])
+        exec(`obj add ${c}`);
+    },
+    cutin() {
+      exec('obj clear');
+      exec('obj add car 45 0 30');
+      exec('obj add car 6 -3.6 32');
+      const id = newestId();
+      later(3000, () => exec(`obj ${id} lane 0 1.2`));
+    },
+    ped() {
+      exec('obj add ped 14 5.5 0');
+      exec(`obj ${newestId()} lane -6 1.3`);
+    },
+    bridge() {
+      exec('obj clear');
+      for (const c of ['manhole 30 0', 'sign 55 0', 'bridge 90 0', 'car 94 0 0']) exec(`obj add ${c}`);
+    },
+    clear() { exec('obj clear'); },
+  };
+  $$('[data-scene]').forEach((b) => b.addEventListener('click', () => SCENES[b.dataset.scene]()));
+  const LEAD_CMD = { stop: 'speed 0 2', go: 'speed 30 1.5', slow: 'speed 10 1.5' };
+  $$('[data-lead]').forEach((b) => b.addEventListener('click', () => {
+    const o = laneLead();
+    if (o) exec(`obj ${o[0]} ${LEAD_CMD[b.dataset.lead]}`);
+  }));
+  $$('[data-show]').forEach((cb) => cb.addEventListener('change', () => {
+    if (cb.dataset.show === 'panel') document.getElementById('radar-panel').dataset.off = cb.checked ? '0' : '1';
+    else getRadarShow()[cb.dataset.show] = cb.checked;
+  }));
+
   // ---- 기타 ----
   $('#reset').addEventListener('click', actions.reset);
   $('#help-btn').addEventListener('click', actions.toggleHelp);
 
   // ---- 코어 상태 → 표시 ----
-  function sync(s) {
+  function sync(s, adas = null) {
+    simT = s.t;
+    for (let i = pending.length - 1; i >= 0; i--) if (pending[i].t <= simT) pending.splice(i, 1)[0].run();
+    const on = !!(adas && adas.on);
+    $$('.group.adas').forEach((g) => { g.hidden = !on; });
+    if (on) {
+      const st = $('#sg-state');
+      st.textContent = SG_KO[adas.sg.state] || adas.sg.state;
+      st.className = adas.sg.state;
+      $('#sg-sw').classList.toggle('active', !!adas.sg.sw);
+      $$('[data-gap]').forEach((b) => b.classList.toggle('active', Number(b.dataset.gap) === adas.sg.gap));
+      $$('[data-radar]').forEach((sel, i) => { if (document.activeElement !== sel) sel.value = adas.map.radars[i].inject; });
+    }
     const drive = !!s.in.drive;
     $('#drive').checked = drive;
     $('#speed-field').hidden = drive;

@@ -6,6 +6,7 @@ import { setupToolbox } from './toolbox.js';
 import { renderHud } from './hud.js';
 import { ScenarioRunner, listScenarios } from './scenario.js';
 import { createWorld } from './scene/world.js';
+import { createRadarPanel } from './radar-panel.js';
 
 const RATES = [0.25, 0.5, 1, 2];
 const TICK_MS = 50;
@@ -45,13 +46,14 @@ try {
 core.onLog((line) => log(line));
 
 const sim = { paused: false, rate: 1, carry: 0 };
-let state;
+let state, adas = null;
 
 function exec(cmd) { log('> ' + cmd, 'cmd'); return core.exec(cmd); }
 function sendQuiet(cmd) { return core.exec(cmd); }   // 페달·슬라이더 드래그처럼 자주 바뀌는 것은 로그에 남기지 않음
 
 const scenario = new ScenarioRunner(core, log, () => {
   if (document.getElementById('drive').checked) sendQuiet('drive on');   // 시나리오가 끝나면 다시 운전 가능하게
+  sendQuiet('adas on');
   input.resync();
 });
 
@@ -75,6 +77,7 @@ const actions = {
     sim.carry = 0;
     log('== 리셋: 초기 상태(C5), 시각 0', 'info');
     if (document.getElementById('drive').checked) sendQuiet('drive on');
+    sendQuiet('adas on');
     input.resync();
   },
   resyncInput: () => input.resync(),
@@ -84,9 +87,9 @@ const actions = {
   closeHelp() { document.getElementById('help').hidden = true; },
 };
 
-const input = setupInput({ exec, sendQuiet, getState: () => state, actions });
+const input = setupInput({ exec, sendQuiet, getState: () => state, actions, getAdas: () => adas });
 const toolbox = setupToolbox({
-  exec, sendQuiet, sim, actions,
+  exec, sendQuiet, sim, actions, getAdas: () => adas, getRadarShow: () => world.radarShow,
   scenarios: {
     list: () => listScenarios('../scenarios/'),
     async play(name) {
@@ -106,6 +109,7 @@ try { savedQuality = localStorage.getItem('vbc.quality'); } catch { /* 저장소
 const world = createWorld(document.getElementById('view'), {
   log, quality: params.get('q') || savedQuality || 'std', carModel: params.get('car') || 'auto' });
 const hudEl = document.getElementById('hud');
+const radarPanel = createRadarPanel(document.getElementById('radar-panel'));
 
 // 화질: 기본(그림자·블룸 없음) / 표준 / 높음. 고른 값은 이 브라우저에 기억
 const qualityBtns = [...document.querySelectorAll('#quality [data-q]')];
@@ -120,7 +124,9 @@ showQuality();
 
 core.init(false);
 sendQuiet('drive on');
+sendQuiet('adas on');   // 레이더 센서 모델·맵·Stop & Go (exp/radar-stop-and-go)
 state = core.state();
+adas = core.adas();
 loading.remove();
 log('준비됨. I 시동 → D 기어 → ↑ 가속. H 도움말', 'info');
 
@@ -137,9 +143,13 @@ function frame(now) {
   last = now;
   if (!sim.paused) advance(dt * sim.rate);
   state = core.state();
-  toolbox.sync(state);
-  renderHud(hudEl, state, sim, scenario.active ? scenario.name : '');
-  world.update(state, sim.paused ? 0 : (dt / 1000) * sim.rate, input.lateral());
+  adas = core.adas();
+  const pts = adas.on ? core.points() : null;
+  document.body.classList.toggle('adas', !!adas.on);
+  toolbox.sync(state, adas);
+  renderHud(hudEl, state, sim, scenario.active ? scenario.name : '', adas);
+  world.update(state, sim.paused ? 0 : (dt / 1000) * sim.rate, input.lateral(), adas, pts);
+  radarPanel.render(adas, pts);
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

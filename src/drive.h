@@ -13,6 +13,9 @@
  *   R5 최고 속도는 전진 250 km/h, 후진 20 km/h. 가속 정도는 팀이 정해 발표한다 (아래 수치).
  *
  * 속도는 방향 없는 속력이다 (사양서 3.1). 후진은 기어 R로 구분한다.
+ *
+ * Stop & Go 연결 (exp/radar-stop-and-go, 요구사항 XR1·XR2):
+ *   우선순위 = 브레이크 > 가속 페달 > 정지 유지 요청 > 목표 가속도 요청 > 자연 감속(R4)
  */
 
 #ifndef DRIVE_H
@@ -36,6 +39,9 @@ typedef struct {
     bool ignition;
     Throttle throttle;
     bool brake;
+    bool req_on;          /* XR1: 목표 가속도 요청이 있음 */
+    int32_t req_mmps2;    /* 목표 가속도 mm/s² */
+    bool req_hold;        /* XR2: 정지 유지 요청 */
 } Drive;
 
 /* 정지, 기어 P, 시동 꺼짐 (C5와 같은 시작 상태) */
@@ -50,7 +56,10 @@ bool drive_request_ignition(Drive *d, bool on);
 /* R2: 정지 상태에서만 바꾼다. 받아들이면 true. 이미 같은 기어면 true */
 bool drive_request_gear(Drive *d, Gear gear);
 
-/* dt_ms 동안 진행 (R1, R3, R4, R5) */
+/* Stop & Go 요청 (XR1, XR2). 다음 요청까지 유지된다 */
+void drive_set_request(Drive *d, bool accel_on, int32_t accel_mmps2, bool hold);
+
+/* dt_ms 동안 진행 (R1, R3, R4, R5, XR1, XR2) */
 void drive_step(Drive *d, vbc_ms_t dt_ms);
 
 /* 코어에 보낼 속도: 반올림한 km/h */

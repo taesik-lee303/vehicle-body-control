@@ -9,6 +9,8 @@ import { createCar } from './car.js';
 import { loadGltfCar } from './car-gltf.js';
 import { createSky } from './sky.js';
 import { createRoad } from './road.js';
+import { createTraffic } from './traffic.js';
+import { createRadarView } from './radar-view.js';
 
 const LUX_MAX = 60000;
 const LANE_SWAY = 1.0;         // ←→로 움직일 수 있는 폭
@@ -48,6 +50,8 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
 
   const road = createRoad(scene);
   const LANE_X = road.laneX;
+  const traffic = createTraffic(scene, LANE_X);     // 시뮬레이터 세계의 차·보행자·육교 (정답)
+  const radarView = createRadarView(scene, LANE_X); // 레이더가 본 것 (맵의 검출점·트랙)
 
   // ---- 비: 짧은 선분. 강우량에 비례해 그리는 개수만 바꾼다 ----
   const dropPos = new Float32Array(MAX_DROPS * 6), dropCol = new Float32Array(MAX_DROPS * 6);
@@ -126,7 +130,8 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
 
   let carX = LANE_X, clock = 0;
 
-  function update(s, dt, lateral) {
+  function update(s, dt, lateral, adas = null, pts = null) {
+    if (adas && adas.on) lateral = 0;   // 레이더 모드에서는 차선 가운데 고정 (맵의 자차 위치와 맞춤)
     clock += dt;
     const speedMs = s.in.speed_mkmh / 1000 / 3.6;
     const dir = s.in.gear === 'R' ? -1 : 1;            // 속도는 방향 없는 속력, 후진은 기어 R로 구분
@@ -186,6 +191,8 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
     sun.target.position.copy(car.group.position);
 
     car.update(s, dt, speedMs, dir, speedMs > 0.3 ? lateral : 0, wet);
+    traffic.update(adas && adas.on ? adas.objs : [], dark);
+    radarView.update(adas, pts);
     placeCamera(dt, carX, speedMs * 3.6);
     if (QUALITY[q].bloom) composer.render(); else renderer.render(scene, camera);
   }
@@ -195,5 +202,6 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
     nextCamera: () => { camMode = (camMode + 1) % CAMERAS.length; camSnap = true; return CAMERAS[camMode]; },
     setQuality: (name) => { if (QUALITY[name]) { q = name; applyQuality(); } return QUALITY[q].label; },
     quality: () => q,
+    radarShow: radarView.show,
   };
 }
