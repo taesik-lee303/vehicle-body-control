@@ -34,6 +34,8 @@ struct RoadPath {
 
 static RoadPath g_path;
 
+static double near_face(const World *w, const WorldObj *o);
+
 static double wrap(double a)
 {
     return atan2(sin(a), cos(a));
@@ -256,6 +258,14 @@ void world_step(World *w, double dt_s, double ego_v_mps)
         WorldObj *o = &w->obj[i];
         if (!o->used || !OBJ_SPECS[o->kind].movable)
             continue;
+        if (o->trig_mode) { /* 조건부 가로 이동: 자차가 다가오면 건너기, 추월해 앞서면 끼어들기 */
+            double d = near_face(w, o);
+            if ((o->trig_mode == 1 && d <= o->trig_d) || (o->trig_mode == 2 && d >= o->trig_d)) {
+                o->y_target = o->trig_y;
+                o->vy_max = o->trig_vy;
+                o->trig_mode = 0;
+            }
+        }
         double v0 = o->v;
         o->v = approach(o->v, o->v_target, o->accel * dt_s);
         o->s += (v0 + o->v) / 2.0 * dt_s;
@@ -297,6 +307,42 @@ Box3 world_box(const World *w, const WorldObj *o)
     float ex = b.hl * c + b.hw * sn, ey = b.hl * sn + b.hw * c;
     Box3 r = {b.cx - ex, b.cx + ex, b.cy - ey, b.cy + ey, b.z0, b.z1};
     return r;
+}
+
+static bool ieq_word(const char *a, const char *b)
+{
+    for (; *a && *b; a++, b++)
+        if (tolower((unsigned char)*a) != tolower((unsigned char)*b))
+            return false;
+    return !*a && !*b;
+}
+
+bool world_lane_y(const World *w, double s, const char *name, double *y)
+{
+    LaneInfo L = world_lanes(w, s);
+    bool right = -1.5 * L.lw >= L.same_r - 0.2, left = 1.5 * L.lw <= L.same_l + 0.2;
+    if (ieq_word(name, "same")) *y = 0.0;
+    else if (ieq_word(name, "right") && right) *y = -L.lw;
+    else if (ieq_word(name, "left") && left) *y = L.lw;
+    else if (ieq_word(name, "side") && (right || left)) *y = right ? -L.lw : L.lw;
+    else if (ieq_word(name, "opp") && L.has_opp) *y = L.same_l + L.lw / 2.0;
+    else if (ieq_word(name, "curbl")) *y = (L.has_opp ? L.opp_l : L.same_l) + 1.5;
+    else if (ieq_word(name, "curbr")) *y = L.same_r - 1.5;
+    else return false;
+    return true;
+}
+
+static double near_face(const World *w, const WorldObj *o)
+{
+    return o->s - OBJ_SPECS[o->kind].length / 2.0 - w->ego_s;
+}
+
+void world_trigger_lane(World *w, WorldObj *o, double d, double y, double vy)
+{
+    o->trig_mode = near_face(w, o) > d ? 1 : 2;
+    o->trig_d = d;
+    o->trig_y = y;
+    o->trig_vy = vy;
 }
 
 int world_kind_from_name(const char *name)

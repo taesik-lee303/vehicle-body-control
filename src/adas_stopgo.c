@@ -16,6 +16,9 @@
 #define STOP_ROOM_MIN 0.3f
 #define STOP_ROOM_FIRM 0.7f
 #define STOP_FIRM_A (-0.8f)
+#define STOP_PROFILE_A 1.0f /* 서는 속도 곡선의 감속도 m/s² */
+#define STOP_PROFILE_K 0.8f
+#define STOP_PROFILE_MARGIN 0.5f /* 늦게 따라가며 더 들어가는 만큼 */
 #define STOP_FINAL_A (-1.5f)
 
 void sg_init(StopGo *sg)
@@ -92,14 +95,19 @@ static float control(StopGo *sg, vbc_ms_t now, float v, const Track *lead, float
         float af = FOLLOW_KD * (d - d_star) + FOLLOW_KV * vrel;
         if (af < a)
             a = af;
-        /* XS5 정지: 앞차가 서 있고 저속이면 4 m에서 정확히 서는 감속도 */
+        /* XS5 정지: 앞차가 서 있고 저속이면, 남은 거리에서 STOP_PROFILE_A로 서는 속도를 따라 4 m에 선다.
+         * 남은 거리가 길면 그 속도까지 다시 올리고(기어가지 않게), 가까우면 줄인다 */
         if (lead->vx + v < STOP_LEAD_V && v < STOP_MODE_V) {
             float room = d - SG_STOP_GAP_M;
-            float as = room > STOP_ROOM_MIN ? -(v * v) / (2.0f * room) : STOP_FINAL_A;
-            if (room < STOP_ROOM_FIRM && as > STOP_FIRM_A)
-                as = STOP_FIRM_A; /* 마지막 0.7 m는 확실히 선다 */
-            if (as < a)
-                a = as;
+            float as;
+            if (room < STOP_ROOM_FIRM) {
+                as = room > STOP_ROOM_MIN ? fminf(STOP_FIRM_A, -(v * v) / (2.0f * room)) : STOP_FINAL_A;
+            } else {
+                float v_des = sqrtf(2.0f * STOP_PROFILE_A * fmaxf(room - STOP_PROFILE_MARGIN, 0.0f));
+                as = STOP_PROFILE_K * (v_des - v);
+                if (as > SG_A_MAX) as = SG_A_MAX;
+            }
+            a = fminf(as, CRUISE_K * ((float)sg->set_kmh / 3.6f - v)); /* 추종식 대신, 설정 속도는 넘지 않게 */
         }
         if (vrel < -0.1f)
             ttc = d / -vrel;

@@ -12,7 +12,7 @@
 #include <string.h>
 
 #define MAX_LINE 256
-#define MAX_TOKENS 6
+#define MAX_TOKENS 8
 #define MAX_WAIT_MS 600000u /* wait 한 번에 최대 10분 */
 #define VALUE_LIMIT 1000000 /* 숫자 입력 허용 범위 (범위 밖 시험값 포함) */
 
@@ -575,9 +575,10 @@ static ConsoleResult cmd_tracks(Console *c, const char *a)
 static ConsoleResult cmd_obj(Console *c, int n, char **tok)
 {
     World *w = &c->adas.world;
-    const char *usage = "사용법: obj add car|truck|ped|bridge|sign|manhole <앞 거리 m> <y m> [속도 km/h]\n"
-                        "        obj <번호> speed <km/h> [가감속 m/s²] | obj <번호> lane <y m> [가로 속도 m/s]\n"
-                        "        obj <번호> del | obj clear | obj list";
+    const char *usage = "사용법: obj add car|truck|ped|bridge|sign|manhole <앞 거리 m> <y> [속도 km/h]\n"
+                        "        obj <번호> speed <km/h> [가감속 m/s²] | obj <번호> lane <y> [가로 속도 m/s] [at <거리 m>]\n"
+                        "        obj <번호> del | obj clear | obj list\n"
+                        "        y: 미터(왼쪽 +) 또는 차로 이름 same right left side opp curbl curbr (그 자리의 실제 차로)";
 
     adas_need(c);
     if (n == 2 && ieq(tok[1], "clear")) {
@@ -592,8 +593,11 @@ static ConsoleResult cmd_obj(Console *c, int n, char **tok)
     if (n >= 5 && ieq(tok[1], "add")) {
         int k = world_kind_from_name(tok[2]);
         double ahead, y, kmh = 0;
-        if (k < 0 || !parse_float(tok[3], &ahead) || !parse_float(tok[4], &y) || (n >= 6 && !parse_float(tok[5], &kmh)))
+        if (k < 0 || !parse_float(tok[3], &ahead) || (n >= 6 && !parse_float(tok[5], &kmh)))
             return err(c, "%s", usage);
+        if (!parse_float(tok[4], &y) &&
+            !world_lane_y(w, w->ego_s + ahead + OBJ_SPECS[k].length / 2.0, tok[4], &y))
+            return err(c, "%.0f m 앞에는 '%s' 차로가 없습니다 (차로 이름: same right left side opp curbl curbr)", ahead, tok[4]);
         int id = world_add(w, (ObjKind)k, ahead, y, kmh / 3.6);
         if (!id)
             return err(c, "물체를 더 넣을 수 없습니다 (최대 %d개)", WORLD_MAX_OBJ);
@@ -621,12 +625,20 @@ static ConsoleResult cmd_obj(Console *c, int n, char **tok)
             return CONSOLE_OK;
         }
         if (n >= 4 && ieq(tok[2], "lane")) {
-            double y, vy = 1.0;
-            if (!parse_float(tok[3], &y) || (n >= 5 && (!parse_float(tok[4], &vy) || vy <= 0)))
+            double y, vy = 1.0, at = 0;
+            bool trig = n == 7 && ieq(tok[5], "at");
+            if ((n >= 5 && (!parse_float(tok[4], &vy) || vy <= 0)) || (n >= 6 && !trig) || (trig && !parse_float(tok[6], &at)))
                 return err(c, "%s", usage);
-            o->y_target = y;
-            o->vy_max = vy;
-            say(c, "  물체 #%d 가로 위치 → y %.1f m (%.1f m/s)\n", (int)id, y, vy);
+            if (!parse_float(tok[3], &y) && !world_lane_y(w, o->s, tok[3], &y))
+                return err(c, "물체 #%d 자리에는 '%s' 차로가 없습니다", (int)id, tok[3]);
+            if (trig) {
+                world_trigger_lane(w, o, at, y, vy);
+                say(c, "  물체 #%d: 자차까지 %.1f m가 되면 y %.1f m로 (%.1f m/s)\n", (int)id, at, y, vy);
+            } else {
+                o->y_target = y;
+                o->vy_max = vy;
+                say(c, "  물체 #%d 가로 위치 → y %.1f m (%.1f m/s)\n", (int)id, y, vy);
+            }
             return CONSOLE_OK;
         }
     }
@@ -1016,7 +1028,9 @@ void console_print_help(const Console *c)
         "    adas on|off             레이더 센서 모델·맵·Stop & Go 켜기 (obj, radar, sg를 쓰면 자동으로 켬)\n"
         "    adas rail on|off        센서 모델의 오른쪽 가드레일 반사 (실제 지도 모드에서는 끔)\n"
         "    obj add <종류> <앞 m> <y m> [km/h]   종류 car truck ped bridge sign manhole. y는 왼쪽 +\n"
-        "    obj <번호> speed <km/h> [m/s²] | lane <y m> [m/s] | del,  obj clear,  obj list\n"
+        "    obj <번호> speed <km/h> [m/s²] | lane <y> [m/s] [at <m>] | del,  obj clear,  obj list\n"
+        "                            y = 미터 또는 차로 이름 same right left side opp curbl curbr (그 자리의 실제 차로)\n"
+        "                            lane ... at <m>: 자차까지 거리가 m가 되면 가로 이동 시작 (횡단·끼어들기)\n"
         "    radar fr|fcl|fcr|all ok|cut|repeat|stuck|block   레이더 고장 주입 (XH8)\n"
         "    sg on|off|set|res|up|down,  sg gap 1|2|3          Stop & Go 스위치·버튼\n"
         "    expect sg off|standby|active|hold|wait,  sgalert none|takeover|radar|go,\n"

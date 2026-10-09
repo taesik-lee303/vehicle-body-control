@@ -77,8 +77,11 @@
     <div class="group adas">
       <div class="label">교통 장면</div>
       <div class="seg">
-        <button data-scene="jam">정체 행렬</button><button data-scene="cutin">끼어들기</button><button data-scene="ped">보행자 횡단</button>
-        <button data-scene="bridge">육교·맨홀</button><button data-scene="clear">지우기</button>
+        <button data-scene="jam" title="내 차로 앞에 차 3대(30 km/h), 옆·반대 차로에도 차. 앞차 멈춤/출발로 정체를 만들어 Stop &amp; Go를 봅니다 (XS4~XS7)">정체 행렬</button>
+        <button data-scene="cutin" title="옆 차로 차가 내 차를 추월해 8 m 앞서면 내 차로로 들어옵니다. 선행 차량이 바뀌는지 봅니다 (XM9). 옆 차로가 있는 곳에서만">끼어들기</button>
+        <button data-scene="ped" title="달릴 때: 길가 보행자가 내가 다가가면 건너기 시작 (XM9, XS5). 서 있을 때: 바로 앞을 건너 재출발을 막음 (XS9)">보행자 횡단</button>
+        <button data-scene="bridge" title="4D 레이더 높이 거르기 시험: 맨홀(낮음)·표지판·육교(높음)는 무시하고, 육교 아래 서 있는 차에만 섭니다 (XM6)">높이 거르기</button>
+        <button data-scene="clear">지우기</button>
       </div>
       <div class="seg"><span class="mini">앞차</span><button data-lead="stop">멈춤</button><button data-lead="go">출발 30</button><button data-lead="slow">10 km/h</button></div>
     </div>
@@ -130,15 +133,10 @@
   </div>
 </aside>
 
+<div id="right-stack">
 <section id="log-panel">
   <header><strong>이벤트 로그</strong><button id="log-clear">지우기</button></header>
   <div id="log"></div>
-</section>
-
-<section id="minimap" hidden>
-  <canvas></canvas>
-  <div class="mm-cap"></div>
-  <div class="mm-attr"></div>
 </section>
 
 <section id="radar-panel" hidden>
@@ -146,8 +144,16 @@
   <canvas></canvas>
   <div class="foot"></div>
 </section>
+</div>
 
-<footer id="hud"></footer>
+<section id="minimap" hidden>
+  <header><strong>미니맵</strong></header>
+  <canvas></canvas>
+  <div class="mm-cap"></div>
+  <div class="mm-attr"></div>
+</section>
+
+<footer id="hud"><div id="hud-body"></div></footer>
 
 <div id="help" hidden>
   <h2>조작</h2>

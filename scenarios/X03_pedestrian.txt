@@ -1,0 +1,40 @@
+# X03 보행자 횡단: 달리는 중 길가 보행자가 건너면 속도를 줄여 비켜 가고, 서 있을 때 앞에서 건너면 앞차가 떠나도 출발하지 않는다 (XM9, XS4, XS9)
+#! at 2420
+adas on
+drive on
+ign on
+gear d
+pedal 1 0
+wait 3
+pedal 0 0
+sg on
+sg set                      # 앞차 없이 30 km/h 정속 (XS3)
+# 1) 달리는 중: 보행자가 경로에 닿기까지 4초, 그동안 자차가 약 35 m 가므로 65 m 앞에서 출발시킨다
+obj add ped 100 curbr 0     # #1 보행자: 100 m 앞 오른쪽 길가에서 기다림
+obj 1 lane curbl 1.3 at 65  # 자차가 65 m 안으로 오면 건너기 시작
+wait 9
+expect lead on              # 경로 안으로 들어온 보행자 = 선행 (XM9)
+expect sgalert none         # 충돌 위험 없이 미리 줄임
+wait 8
+expect lead off             # 다 건넘
+expect sg active
+expect moving on
+# 2) 서 있을 때: 앞차 뒤에 선 다음 바로 앞을 보행자가 건넌다
+obj add car 30 same 0       # #2 서 있는 앞차
+wait 7.5                    # 27초에 앞차 뒤에 섬
+expect sg hold
+obj add ped 1.5 -3 0        # #3 자차 바로 앞 오른쪽 3 m (차도로 걸어 나옴)
+obj 3 lane curbl 1.2        # 건너기 시작
+wait 0.5
+obj 2 speed 30 1.5          # 앞차 출발
+wait 1.5
+expect sg hold              # XS9: 다가오는·경로 안 보행자 → 재출발 금지
+wait 1                      # 32초: 정지 3초가 지나 재출발 대기, 보행자는 아직 경로 안
+expect sg wait
+sg res
+expect sg wait              # 보행자가 경로 안 → RES도 안 됨 (XS9)
+wait 3                      # 보행자가 지나감
+sg res
+expect sg active
+wait 2
+expect moving on

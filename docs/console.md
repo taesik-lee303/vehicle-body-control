@@ -94,9 +94,9 @@ expect headlight on     # 3.000초
 |---|---|
 | `adas on\|off` | 레이더 센서 모델·전방 맵·Stop & Go |
 | `adas rail on\|off` | 센서 모델의 오른쪽 가드레일 반사 (실제 지도 모드에서는 화면이 끔) |
-| `obj add <종류> <앞 m> <y m> [km/h]` | 물체 추가. 종류 `car truck ped bridge sign manhole`. 앞 = 자차 앞 범퍼에서 물체의 가까운 면까지, y = 내 차로 가운데 기준 왼쪽 + (오른쪽 차로 −3.6, 반대 차로 +3.6) |
+| `obj add <종류> <앞 m> <y> [km/h]` | 물체 추가. 종류 `car truck ped bridge sign manhole`. 앞 = 자차 앞 범퍼에서 경로를 따라 물체의 가까운 면까지 (음수면 옆·뒤). y = 미터(내 차로 가운데 기준 왼쪽 +) 또는 차로 이름: `same` 내 차로, `right`·`left` 같은 방향 옆 차로, `side` 오른쪽(없으면 왼쪽), `opp` 반대 차로, `curbl`·`curbr` 왼쪽·오른쪽 길가. 그 자리에 없는 차로면 오류 |
 | `obj <번호> speed <km/h> [m/s²]` | 목표 속도와 가감속 (기본 2) |
-| `obj <번호> lane <y m> [m/s]` | 가로 이동: 차로 변경·횡단 (기본 1) |
+| `obj <번호> lane <y> [m/s] [at <m>]` | 가로 이동: 차로 변경·횡단 (기본 1 m/s). `at <m>`: 자차까지 거리가 m가 되면 시작 (다가오면 건너기, 추월해 앞서면 끼어들기) |
 | `obj <번호> del`, `obj clear`, `obj list` | |
 | `radar fr\|fcl\|fcr\|all ok\|cut\|repeat\|stuck\|block` | 고장 주입: 끊김, 프레임 반복(카운터째), 값 고착(카운터만 늘어남), 가림 |
 | `sg on\|off\|set\|res\|up\|down`, `sg gap 1\|2\|3` | Stop & Go 스위치, SET, RES, 설정 속도 ±10, 차간 1.0/1.5/2.0 s |

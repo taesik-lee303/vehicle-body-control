@@ -1,0 +1,25 @@
+# X01 정체 구간 Stop & Go: 앞차를 따라 서고, 3초 안에 앞차가 떠나면 스스로 출발 (XS3~XS6)
+#! at 2420
+adas on
+drive on
+ign on
+gear d
+obj add car 25 same 30      # #1 앞차: 25 m 앞, 내 차로, 30 km/h
+pedal 1 0
+wait 3
+pedal 0 0
+sg on                       # Stop & Go 스위치 (XS1)
+sg set                      # 지금 속도로 작동, 설정 30 km/h (XS2)
+expect sg active
+wait 6
+expect lead on              # 레이더 3개 → 전방 맵 → 선행 차량 (XM9)
+obj 1 speed 0 2             # 앞차가 −2 m/s²로 선다
+wait 12
+expect sg hold              # XS5: 앞차 뒤에 서서 정지 유지
+expect gap 3 5              # XS5: 4.0 ± 1.0 m
+obj 1 speed 30 1.5          # 정지 0.8초 뒤 앞차 출발
+wait 1.5
+expect sg active            # XS6: 3초 안이면 스스로 재출발
+expect moving on
+wait 6
+expect sgalert none

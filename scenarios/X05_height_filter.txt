@@ -1,0 +1,24 @@
+# X05 높이 거르기 (4D 레이더): 맨홀(낮음)·문형 표지판·육교(높음)는 장애물이 아니고, 육교 아래 서 있는 차 뒤에만 선다 (XM6, XM7)
+#! at 2420
+adas on
+drive on
+ign on
+gear d
+obj add manhole 35 same     # 낮음: 노면 위 0.03 m
+obj add sign 50 same        # 높음: 5.0~6.5 m
+obj add bridge 70 same      # 높음: 4.5~5.5 m
+obj add car 74 same 0       # 육교 아래 서 있는 차
+pedal 1 0
+wait 3
+pedal 0 0
+sg on
+sg set
+wait 1
+expect gap 52 56            # 정답: 내 차로 장애물은 그 차뿐
+expect leadx 51 57          # 맵이 고른 선행 = 그 차 (맨홀·표지판·육교가 아님)
+wait 3
+expect leadx 25 32
+expect moving on            # 맨홀·표지판 앞에서 서지 않음
+wait 9
+expect sg hold              # 차 뒤에 섬
+expect gap 3 5

@@ -27,7 +27,8 @@ export async function listScenarios(base = '../scenarios/') {
 
 export class ScenarioRunner {
   // core: {init, exec, advance, state}, log(text, cls), onEnd(result)
-  // onInit: 코어를 초기화한 직후 (화면이 자차 자세 등을 다시 알려 줄 때)
+  // onInit(opts): 코어를 초기화한 직후 (화면이 자차 자세 등을 다시 알려 줄 때).
+  // opts는 파일의 '#! 이름 값' 줄 (예: '#! at 2420' → { at: 2420 }: 지도 모드에서 그 경로 지점에서 시작)
   constructor(core, log, onEnd = () => {}, onInit = () => {}) {
     this.core = core;
     this.log = log;
@@ -46,7 +47,9 @@ export class ScenarioRunner {
     this.frac = 0;
     this.active = true;
     this.core.init(false);
-    this.onInit();
+    const opts = {};
+    for (const l of this.lines) { const m = /^#!\s*(\w+)\s+(\S+)/.exec(l.trim()); if (m) opts[m[1]] = Number(m[2]); }
+    this.onInit(opts);
     this.log(`== 시나리오 시작: ${name} (초기 상태에서)`, 'info');
     this.run();
   }

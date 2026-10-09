@@ -510,6 +510,42 @@ TEST(xm8_curved_path_from_yaw_rate)
     CHECK(fabsf(map_path_y(&g_m, 20.0f) - 4.0f) < 0.01f);
 }
 
+/* 차로 이름: 직선 도로(편도 2차로, 내 차로는 가운데선 옆)와 차로가 하나뿐인 곳 */
+TEST(lane_names_resolve_to_real_lanes)
+{
+    static World w;
+    double y;
+    world_init(&w);
+    CHECK(world_lane_y(&w, 10, "side", &y) && fabs(y + 3.6) < 1e-6);  /* 오른쪽 차로 */
+    CHECK(!world_lane_y(&w, 10, "left", &y));                          /* 왼쪽은 반대 방향 */
+    CHECK(world_lane_y(&w, 10, "opp", &y) && fabs(y - 3.6) < 1e-6);
+    circle_path(-1.5f, 1.5f, 1.5f); /* 같은 방향 한 차로, 반대 차로 없음 */
+    world_init(&w);
+    CHECK(!world_lane_y(&w, 10, "side", &y));
+    CHECK(!world_lane_y(&w, 10, "opp", &y));
+    CHECK(world_lane_y(&w, 10, "curbr", &y) && y < -1.5);
+    world_path_set(NULL, NULL, 0);
+}
+
+/* 조건부 가로 이동: 다가오면 건너기(거리 ≤ d), 추월해 앞서면 끼어들기(거리 ≥ d) */
+TEST(triggered_lane_moves)
+{
+    static World w;
+    world_init(&w);
+    int ped = world_add(&w, OBJ_PED, 40, -6.9, 0);
+    world_trigger_lane(&w, world_find(&w, ped), 20, 6.0, 1.3);
+    int car = world_add(&w, OBJ_CAR, -6, -3.6, 45 / 3.6);
+    world_trigger_lane(&w, world_find(&w, car), 8, 0.0, 1.2);
+    for (int k = 0; k < 20; k++) /* 자차 10 m/s로 1초: 보행자까지 30 m, 차는 아직 8 m 못 앞섬 */
+        world_step(&w, 0.05, 10.0);
+    CHECK(fabs(world_find(&w, ped)->y + 6.9) < 1e-9);
+    CHECK(world_find(&w, car)->y < -3.5);
+    for (int k = 0; k < 100; k++) /* 5초 더: 보행자 20 m 안, 차는 상대 2.5 m/s로 14 m를 가 8 m 넘게 앞섬 (5.6초) */
+        world_step(&w, 0.05, 10.0);
+    CHECK(world_find(&w, ped)->y > -6.9);
+    CHECK(world_find(&w, car)->y > -3.6);
+}
+
 int main(void)
 {
     printf("test_radar\n");
@@ -537,5 +573,7 @@ int main(void)
     RUN(path_lane_clamp_keeps_cars_on_road);
     RUN(external_ego_projects_onto_path);
     RUN(radar_sees_car_on_curve);
+    RUN(lane_names_resolve_to_real_lanes);
+    RUN(triggered_lane_moves);
     return test_summary();
 }

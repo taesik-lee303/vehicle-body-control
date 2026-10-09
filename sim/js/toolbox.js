@@ -14,7 +14,7 @@ const RADAR_MODES = [['ok', '정상'], ['cut', '끊김'], ['repeat', '프레임 
 const SG_KO = { off: '꺼짐', standby: '대기', active: '작동', hold: '정지 유지', wait: '재출발 대기' };
 
 export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas = () => null, getRadarShow = () => ({}),
-  getLanes = () => ({ right: -3.6, left: null, opp: 3.6 }), isMap = () => false }) {
+  log = () => {} }) {
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => [...document.querySelectorAll(sel)];
   const root = $('#toolbox');
@@ -79,10 +79,18 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas
 
   // ---- 시나리오 ----
   const select = $('#scenario');
-  scenarios.list().then((names) => {
+  scenarios.list().then(async (names) => {
     select.innerHTML = names.length
       ? names.map((n) => `<option value="${n}">${n.replace(/\.txt$/, '')}</option>`).join('')
       : '<option value="">(scenarios/ 없음)</option>';
+    // 파일 첫 줄 '# ...'을 보이는 이름으로 (요구사항 묶음과 무엇을 보는지)
+    for (const opt of select.options) {
+      if (!opt.value) continue;
+      try {
+        const first = (await (await fetch('../scenarios/' + encodeURIComponent(opt.value))).text()).split(/\r?\n/)[0];
+        if (first.startsWith('#')) { const t = first.replace(/^#\s*/, ''); opt.textContent = t.split(':')[0]; opt.title = t; }
+      } catch { /* 이름 그대로 */ }
+    }
   }).catch(() => { select.innerHTML = '<option value="">(목록 실패)</option>'; });
   $('#scenario-play').addEventListener('click', () => select.value && scenarios.play(select.value));
   $('#scenario-stop').addEventListener('click', scenarios.stop);
@@ -96,11 +104,12 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas
   $$('[data-sg]').forEach((b) => b.addEventListener('click', () => exec(`sg ${b.dataset.sg}`)));
   $$('[data-gap]').forEach((b) => b.addEventListener('click', () => exec(`sg gap ${b.dataset.gap}`)));
 
-  // 교통 장면: 지금 자차 위치 기준으로 물체를 놓는다 (요구사항 8.4 obj 명령)
-  const pending = [];   // { t: 시뮬 시각 ms, run }
-  let simT = 0;
-  const later = (ms, run) => pending.push({ t: simT + ms, run });
+  // 교통 장면: 지금 자차 위치·속도 기준으로 물체를 놓는다 (요구사항 8.4 obj 명령).
+  // 차로는 이름(same·side·opp·curbr·curbl)으로 보내고 C 세계가 그 자리의 실제 차로로 바꾼다. 그 차로가 없으면 명령이 실패한다
+  let egoMs = 0;   // 자차 속도 m/s (sync에서 갱신)
   const newestId = () => (getAdas()?.objs || []).reduce((m, o) => Math.max(m, o[0]), 0);
+  const ok = (cmd) => exec(cmd) === 0;
+  const info = (text) => log(text, 'info');
   // 물체: [id, 종류, 가운데 x, 가운데 y, 길이, ...] (자차 기준)
   const laneLead = () => {
     let best = null;
@@ -110,33 +119,43 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas
     }
     return best;
   };
-  // 옆 차로는 그 자리에 실제로 있을 때만 쓴다 (지도는 구간마다 차로 수가 다르다)
-  const side = (ahead) => { const L = getLanes(ahead); return L.right ?? L.left; };
   const SCENES = {
     jam() {
       exec('obj clear');
-      for (const c of ['car 18 0 30', 'car 31 0 30', 'truck 44 0 30']) exec(`obj add ${c}`);
-      for (const [ahead, v] of [[12, 33], [36, 31]]) { const y = side(ahead); if (y !== null) exec(`obj add car ${ahead} ${y.toFixed(2)} ${v}`); }
-      const opp = getLanes(120).opp;
-      if (opp !== null) exec(`obj add car 120 ${opp.toFixed(2)} -40`);
+      for (const c of ['car 18 same 30', 'car 31 same 30', 'truck 44 same 30']) exec(`obj add ${c}`);
+      ok('obj add car 12 side 33') && ok('obj add car 36 side 31');
+      ok('obj add car 120 opp -40');
+      info('▶ 정체 행렬: 내 차로 앞에 차 3대가 30 km/h. G(스위치) → S(SET)로 Stop & Go를 켜고, 아래 "앞차 멈춤/출발"로 정체를 만들어 보세요 (XS4~XS7)');
     },
     cutin() {
-      const y = side(6);
-      if (y === null) { exec('obj clear'); exec('obj add car 45 0 30'); return; }   // 옆 차로가 없는 곳
+      const v = egoMs, lead = Math.max(30, v * 2.5 + 20);
       exec('obj clear');
-      exec('obj add car 45 0 30');
-      exec(`obj add car 6 ${y.toFixed(2)} 32`);
-      const id = newestId();
-      later(3000, () => exec(`obj ${id} lane 0 1.2`));
+      exec(`obj add car ${lead.toFixed(0)} same ${Math.max(25, v * 3.6).toFixed(0)}`);
+      if (!ok(`obj add car -6 side ${Math.max(30, v * 3.6 + 15).toFixed(0)}`)) {
+        info('  ! 여기에는 같은 방향 옆 차로가 없어 끼어들기를 만들 수 없습니다. 직선 도로(?map=straight)나 능동로·광나루로 구간에서 해 보세요');
+        return;
+      }
+      exec(`obj ${newestId()} lane same 1.2 at 8`);
+      info('▶ 끼어들기: 옆 차로 차가 내 차를 추월해 8 m 앞서면 내 차로로 들어옵니다. 0.3초 뒤 선행 차량이 그 차로 바뀌는지 보세요 (XM9)');
     },
     ped() {
-      const L = getLanes(14), from = (L.opp ?? L.left ?? 1.5) + 3, to = (L.right ?? 0) - 4.5;
-      exec(`obj add ped 14 ${from.toFixed(1)} 0`);
-      exec(`obj ${newestId()} lane ${to.toFixed(1)} 1.3`);
+      const v = egoMs;
+      if (v < 1) {   // 서 있을 때: 바로 앞에서 건넌다 → 앞차가 떠나도 출발하지 않음
+        exec('obj add ped 2 -3 0');
+        exec(`obj ${newestId()} lane curbl 1.2`);
+        info('▶ 보행자 횡단(정지 중): 바로 앞을 건너는 동안 Stop & Go는 다시 출발하지 않습니다 (XS9). 앞차가 있으면 "출발"을 눌러 보세요');
+        return;
+      }
+      // 달릴 때: 경로에 닿기까지 약 4초, 그동안 자차가 가는 거리 + 편하게 설 거리 앞에서 건너기 시작
+      const at = v * 4.2 + 8 + (v * v) / 4;
+      exec(`obj add ped ${(at + 25).toFixed(0)} curbr 0`);
+      exec(`obj ${newestId()} lane curbl 1.3 at ${at.toFixed(0)}`);
+      info(`▶ 보행자 횡단: 오른쪽 길가 보행자가 내 차가 ${at.toFixed(0)} m 안으로 오면 건너기 시작합니다. Stop & Go가 속도를 줄이거나 서는지 보세요 (XM9, XS5)`);
     },
     bridge() {
       exec('obj clear');
-      for (const c of ['manhole 30 0', 'sign 55 0', 'bridge 90 0', 'car 94 0 0']) exec(`obj add ${c}`);
+      for (const c of ['manhole 30 same', 'sign 55 same', 'bridge 90 same', 'car 94 same 0']) exec(`obj add ${c}`);
+      info('▶ 높이 거르기: 맨홀(바닥 0.03 m)·문형 표지판(5~6.5 m)·육교(4.5~5.5 m)는 4D 레이더가 높이로 걸러 무시하고(회색 상자), 육교 아래 서 있는 차(노란 상자)에만 섭니다 (XM6)');
     },
     clear() { exec('obj clear'); },
   };
@@ -157,8 +176,7 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas
 
   // ---- 코어 상태 → 표시 ----
   function sync(s, adas = null) {
-    simT = s.t;
-    for (let i = pending.length - 1; i >= 0; i--) if (pending[i].t <= simT) pending.splice(i, 1)[0].run();
+    egoMs = s.in.speed_mkmh / 3600;
     const on = !!(adas && adas.on);
     $$('.group.adas').forEach((g) => { g.hidden = !on; });
     if (on) {

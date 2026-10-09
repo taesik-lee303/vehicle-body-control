@@ -8,6 +8,7 @@ import { ScenarioRunner, listScenarios } from './scenario.js';
 import { createWorld } from './scene/world.js';
 import { setupMinimap } from './minimap.js';
 import { createRadarPanel } from './radar-panel.js';
+import { setupPanels } from './panels.js';
 
 const RATES = [0.25, 0.5, 1, 2];
 const TICK_MS = 50;
@@ -69,7 +70,10 @@ const scenario = new ScenarioRunner(core, log, () => {
   if (document.getElementById('drive').checked) sendQuiet('drive on');   // 시나리오가 끝나면 다시 운전 가능하게
   adasOn();
   input.resync();
-}, () => sendEgo(0));
+}, (opts) => {
+  if (opts.at !== undefined && cPath) world.resetPose(opts.at);   // 지도 모드: 시나리오가 정한 경로 지점에서 시작
+  sendEgo(0);
+});
 
 // 시뮬레이션 시간을 ms 진행. 시나리오 재생 중이면 시나리오가 wait 남은 시간만큼 쓴다
 function advance(ms) {
@@ -99,15 +103,15 @@ const actions = {
   },
   resyncInput: () => input.resync(),
   nextCamera() { log(`카메라: ${world.nextCamera()}`, 'info'); },
-  toggleToolbox: () => toolbox.toggle(),
+  toggleToolbox: () => panels.toggle('toolbox'),
   toggleHelp() { const h = document.getElementById('help'); h.hidden = !h.hidden; },
   closeHelp() { document.getElementById('help').hidden = true; },
 };
 
 const input = setupInput({ exec, sendQuiet, getState: () => state, actions, getAdas: () => adas });
 const toolbox = setupToolbox({
-  exec, sendQuiet, sim, actions, getAdas: () => adas, getRadarShow: () => world.radarShow,
-  getLanes: (ahead) => world.lanesAt((adas ? adas.ego_s : 0) + ahead), isMap: () => !!mapData,
+  exec, sendQuiet, sim, actions, getAdas: () => (adas = core.adas()), getRadarShow: () => world.radarShow,   // 프리셋은 방금 넣은 물체까지 보게 새로 읽음
+  log,
   scenarios: {
     list: () => listScenarios('../scenarios/'),
     async play(name) {
@@ -142,7 +146,24 @@ const world = createWorld(document.getElementById('view'), {
   log, quality: params.get('q') || savedQuality || 'std', carModel: params.get('car') || 'auto', map: mapData,
   startAt: Number(params.get('at')) || 0 });   // ?at=1200: 경로의 1.2 km 지점에서 출발 (발표·확인용)
 const minimap = mapData ? setupMinimap(document.getElementById('minimap'), mapData) : null;
-const hudEl = document.getElementById('hud');
+const hudEl = document.getElementById('hud-body');
+// 창 접기·크기 조절: 화면 안쪽 모서리 손잡이 (오른쪽 창은 왼쪽 아래, 툴박스는 오른쪽 아래, 계기판은 오른쪽 위)
+const $id = (id) => document.getElementById(id);
+const panels = setupPanels([
+  { key: 'toolbox', el: $id('toolbox'), corner: 'br', minW: 240 },
+  { key: 'log', el: $id('log-panel'), corner: 'bl', minW: 220 },
+  { key: 'radar', el: $id('radar-panel'), corner: 'bl', minW: 240, minH: 160 },
+  { key: 'minimap', el: $id('minimap'), corner: 'bl', minW: 140, height: false, label: '미니맵' },
+  { key: 'hud', el: $id('hud'), corner: 'tr', center: true, height: false, minW: 420, label: '계기판' },
+]);
+// 미니맵 자리: 전방 맵 창이 보이면 그 왼쪽, 아니면 로그 아래
+function layoutMinimap() {
+  const mm = $id('minimap');
+  if (mm.hidden) return;
+  const rp = $id('radar-panel').getBoundingClientRect(), lg = $id('log-panel').getBoundingClientRect();
+  if (rp.width > 0) { mm.style.top = `${rp.top}px`; mm.style.right = `${innerWidth - rp.left + 12}px`; }
+  else { mm.style.top = `${lg.bottom + 12}px`; mm.style.right = '12px'; }
+}
 const radarPanel = createRadarPanel(document.getElementById('radar-panel'));
 
 // 화질: 기본(그림자·블룸 없음) / 표준 / 높음. 고른 값은 이 브라우저에 기억
@@ -198,6 +219,7 @@ function frame(now) {
   }
   if (crash && state.in.speed_mkmh === 0) { crash = null; input.setForceBrake(false); }
   minimap?.update(world.where(), now);
+  layoutMinimap();
   radarPanel.render(adas, pts);
   // 지도: 자차 자세(직접 운전 포함)를 C 세계에 알려 준다. 센서 모델은 이 자세로 실제 기하를 본다
   sendEgo(dt);

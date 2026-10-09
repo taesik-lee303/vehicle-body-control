@@ -171,8 +171,8 @@ export function createWorld(canvas, { log = () => {}, quality = 'std', carModel 
     }
     return best;
   }
-  function resetPose() {
-    dist = startAt || 0; side = 0; steerAng = 0; odo = 0; manual = false;
+  function resetPose(at = null) {
+    dist = at ?? (startAt || 0); side = 0; steerAng = 0; odo = 0; manual = false;
     if (city) placeOnRoute();
   }
   resetPose();

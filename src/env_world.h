@@ -67,6 +67,9 @@ typedef struct {
     double y_target;  /* 목표 가로 위치 (차로 범위로 제한된다) */
     double vy_max;    /* 가로 이동 속도 크기 m/s */
     double vy;        /* 지금 가로 속도 */
+    /* 조건부 가로 이동 (교통 장면: 끼어들기·횡단). 가까운 면까지 거리가 trig_d 이하(1) / 이상(2)이 되면 시작 */
+    int trig_mode;
+    double trig_d, trig_y, trig_vy;
 } WorldObj;
 
 /* 자차 기준 축 정렬 상자 (OBox를 감싸는 상자) */
@@ -113,6 +116,13 @@ LaneInfo world_lanes(const World *w, double s);
 
 OBox world_obox(const World *w, const WorldObj *o);
 Box3 world_box(const World *w, const WorldObj *o);
+
+/* 차로 이름 → 그 자리(s)의 가로 위치. same(내 차로), right·left(같은 방향 옆 차로), side(오른쪽, 없으면 왼쪽),
+ * opp(반대 차로), curbl·curbr(왼쪽·오른쪽 길가, 보행자용). 그 자리에 없으면 false */
+bool world_lane_y(const World *w, double s, const char *name, double *y);
+
+/* 조건부 가로 이동: 가까운 면까지 거리가 d가 되면(지금보다 멀면 다가와서, 가까우면 멀어져서) y로 vy m/s */
+void world_trigger_lane(World *w, WorldObj *o, double d, double y, double vy);
 
 /* 이름 → 종류. 없으면 -1 */
 int world_kind_from_name(const char *name);
