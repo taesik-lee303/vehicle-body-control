@@ -119,30 +119,32 @@ static void change(const Console *c, const char *label, const char *from, const 
     say(c, "  [%3u.%03us] %s: %s → %s\n", sec_part(c->now), ms_part(c->now), label, from, to);
 }
 
+/* 같은 순간에 여러 개가 바뀌면 원인 → 결과 순으로 찍는다: vbc_step()과 같은 순서
+ * (판정 C2·C4 → 와이퍼 → 조명(L6이 와이퍼 출력을 봄) → 도어 → 계기판) */
 static void report_changes(const Console *c, const Watch *before)
 {
     Watch now = watch_take(c);
     const VbcOutputs *a = &before->out;
     const VbcOutputs *b = &now.out;
 
-    if (a->headlight_on != b->headlight_on)
-        change(c, "전조등", on_off(a->headlight_on), on_off(b->headlight_on));
-    if (a->lux_fault_lamp != b->lux_fault_lamp)
-        change(c, "조도 고장 표시", on_off(a->lux_fault_lamp), on_off(b->lux_fault_lamp));
-    if (a->wiper != b->wiper)
-        change(c, "와이퍼", vbc_wiper_name(a->wiper), vbc_wiper_name(b->wiper));
-    if (a->rain_fault_lamp != b->rain_fault_lamp)
-        change(c, "강우 고장 표시", on_off(a->rain_fault_lamp), on_off(b->rain_fault_lamp));
-    if (a->door_locked != b->door_locked)
-        change(c, "도어", a->door_locked ? "잠김" : "풀림", b->door_locked ? "잠김" : "풀림");
-    if (a->warning != b->warning)
-        change(c, "계기판 경고", vbc_warning_name(a->warning), vbc_warning_name(b->warning));
     if (before->rx_lost != now.rx_lost)
         change(c, "(판정) 차량 상태 수신 중단", yes_no(before->rx_lost), yes_no(now.rx_lost));
     if (before->lux_fault != now.lux_fault)
         change(c, "(판정) 조도 센서 고장", yes_no(before->lux_fault), yes_no(now.lux_fault));
     if (before->rain_fault != now.rain_fault)
         change(c, "(판정) 강우 센서 고장", yes_no(before->rain_fault), yes_no(now.rain_fault));
+    if (a->wiper != b->wiper)
+        change(c, "와이퍼", vbc_wiper_name(a->wiper), vbc_wiper_name(b->wiper));
+    if (a->rain_fault_lamp != b->rain_fault_lamp)
+        change(c, "강우 고장 표시", on_off(a->rain_fault_lamp), on_off(b->rain_fault_lamp));
+    if (a->headlight_on != b->headlight_on)
+        change(c, "전조등", on_off(a->headlight_on), on_off(b->headlight_on));
+    if (a->lux_fault_lamp != b->lux_fault_lamp)
+        change(c, "조도 고장 표시", on_off(a->lux_fault_lamp), on_off(b->lux_fault_lamp));
+    if (a->door_locked != b->door_locked)
+        change(c, "도어", a->door_locked ? "잠김" : "풀림", b->door_locked ? "잠김" : "풀림");
+    if (a->warning != b->warning)
+        change(c, "계기판 경고", vbc_warning_name(a->warning), vbc_warning_name(b->warning));
     if (!now.adas_on || !before->adas_on)
         return;
     for (int i = 0; i < RADAR_COUNT; i++) {
