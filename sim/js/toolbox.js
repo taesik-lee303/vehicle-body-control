@@ -13,7 +13,7 @@ export const sliderFromLux = (lux) => Math.round((Math.log10(Math.max(0, Math.mi
 const RADAR_MODES = [['ok', '정상'], ['cut', '끊김'], ['repeat', '프레임 반복'], ['stuck', '값 고착'], ['block', '가림']];
 const SG_KO = { off: '꺼짐', standby: '대기', active: '작동', hold: '정지 유지', wait: '재출발 대기' };
 
-export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas = () => null, getRadarShow = () => ({}),
+export function setupToolbox({ exec, drag, sim, actions, scenarios, getAdas = () => null, getRadarShow = () => ({}),
   log = () => {} }) {
   const $ = (sel) => document.querySelector(sel);
   const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -33,19 +33,19 @@ export function setupToolbox({ exec, sendQuiet, sim, actions, scenarios, getAdas
   });
   $('#speed-input').addEventListener('change', (e) => exec(`speed ${Math.round(Number(e.target.value) || 0)}`));
 
-  // ---- 슬라이더: 드래그 중에는 100ms마다 조용히, 놓을 때 로그에 남김 ----
+  // ---- 슬라이더: 드래그 중에는 100ms마다 조용히(출력이 바뀌면 그 값을 먼저 로그에), 놓을 때 로그에 남김 ----
   function slider(el, name, toValue, isOor) {
     el.addEventListener('pointerdown', () => { dragging = el; });
     el.addEventListener('input', () => {
       dragging = el;
       if (isOor()) return;
       const now = performance.now();
-      if (now - lastQuiet > 100) { sendQuiet(`${name} ${toValue(Number(el.value))}`); lastQuiet = now; }
+      if (now - lastQuiet > 100) { drag.send(name, `${name} ${toValue(Number(el.value))}`); lastQuiet = now; }
     });
     el.addEventListener('change', () => {
       dragging = null;
       el.blur();
-      if (!isOor()) exec(`${name} ${toValue(Number(el.value))}`);
+      if (!isOor()) drag.commit(name, `${name} ${toValue(Number(el.value))}`);
     });
   }
   const oor = (name) => $(`[data-oor=${name}]`).checked;

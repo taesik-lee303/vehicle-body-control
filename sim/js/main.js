@@ -47,7 +47,15 @@ try {
   loading.textContent = `C 코어를 불러오지 못했습니다.\n${err}\n\n저장소 루트에서 make sim 으로 실행했는지, sim/build/vbc.js가 있는지 확인하세요 (make wasm).`;
   throw err;
 }
-core.onLog((line) => log(line));
+// 슬라이더 드래그 중 조용히 보낸 값: 출력이 바뀌는 순간(바로든 L2·L3처럼 몇 초 뒤든) 그 값을 먼저 남겨
+// 로그가 항상 입력 → 결과 순서가 되게 한다
+const dragPending = new Map();   // 입력 이름 → 아직 로그에 안 남긴 명령
+const dragLogged = new Map();    // 입력 이름 → 이번 드래그에서 마지막으로 남긴 명령
+function flushDrag() {
+  for (const [key, cmd] of dragPending) { log(`> ${cmd}  (드래그 중)`, 'cmd'); dragLogged.set(key, cmd); }
+  dragPending.clear();
+}
+core.onLog((line) => { flushDrag(); log(line); });
 
 const sim = { paused: false, rate: 1, carry: 0 };
 let state, adas = null;
@@ -55,7 +63,17 @@ let cPath = null;   // 지도 모드면 C 세계로 넘긴 주행 경로·차로
 let crash = null;   // 건물·지도 끝에 막혀 브레이크를 걸고 있는 중이면 그 이유
 
 function exec(cmd) { log('> ' + cmd, 'cmd'); return core.exec(cmd); }
-function sendQuiet(cmd) { return core.exec(cmd); }   // 페달·슬라이더 드래그처럼 자주 바뀌는 것은 로그에 남기지 않음
+function sendQuiet(cmd) { return core.exec(cmd); }   // 페달처럼 자주 바뀌는 것은 로그에 남기지 않음
+const drag = {
+  send(key, cmd) { dragPending.set(key, cmd); return core.exec(cmd); },
+  // 놓을 때: 마지막으로 남긴 값과 같으면 다시 적지 않는다
+  commit(key, cmd) {
+    dragPending.delete(key);
+    const same = dragLogged.get(key) === cmd;
+    dragLogged.delete(key);
+    return same ? core.exec(cmd) : exec(cmd);
+  },
+};
 // 레이더 센서 모델·전방 맵·Stop & Go를 켠다 (실제 지도면 C가 가드레일 반사를 스스로 끈다)
 function adasOn() {
   sendQuiet('adas on');
@@ -112,7 +130,7 @@ const actions = {
 
 const input = setupInput({ exec, sendQuiet, getState: () => state, actions, getAdas: () => adas });
 const toolbox = setupToolbox({
-  exec, sendQuiet, sim, actions, getAdas: () => (adas = core.adas()), getRadarShow: () => world.radarShow,   // 프리셋은 방금 넣은 물체까지 보게 새로 읽음
+  exec, drag, sim, actions, getAdas: () => (adas = core.adas()), getRadarShow: () => world.radarShow,   // 프리셋은 방금 넣은 물체까지 보게 새로 읽음
   log,
   scenarios: {
     list: () => listScenarios('../scenarios/'),
