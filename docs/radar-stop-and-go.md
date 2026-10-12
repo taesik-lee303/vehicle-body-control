@@ -1,6 +1,6 @@
 # 전방 레이더 맵 · Stop & Go (실험 브랜치 `exp/radar-stop-and-go`)
 
-필수 과제(VBC-SRS-001)와 별개로 해 보는 실험이다. 요구사항은 Claude Docs 문서 "전방 레이더 맵·Stop & Go 요구사항 (가정)"에 있고, ID(XC·XM·XS·XR·XD·XH)는 그 문서를 따른다.
+필수 과제(VBC-SRS-001)와 별개로 해 보는 실험이다. 요구사항은 [`docs/radar-requirements.md`](radar-requirements.md)(원본: Claude Docs 문서 "전방 레이더 맵·Stop & Go 요구사항 (가정)")에 있고, ID(XC·XM·XS·XR·XD·XH)는 그 문서를 따른다.
 레이더 하드웨어 3개를 **센서 모델**로 소프트웨어 안에 만들고, 그 출력(검출점 프레임)만으로 전방 맵을 만들어 선행 차량을 따라 서고 출발한다. 터미널과 브라우저 시뮬레이터 둘 다에서 돈다.
 
 ## 구조
