@@ -1,0 +1,104 @@
+# Z03 도어·잠금·경고(D) 시연: D1 → D2 → D3 → D4 → D5
+# '#@' 줄은 지금 검증하는 요구사항이다. 시뮬레이터 이벤트 로그에 빨간색으로 표시된다.
+# 시작 상태: 시동 OFF, 기어 P, 속도 0, 조도 30000, 강우 0%, 스위치 OFF, 주행 모델 OFF(속도 직접 입력)
+# 시연 문서에 시간이 정해진 구간은 그대로 두고, 시간이 없는 구간은 단계 사이에 1~2초 대기를 넣었다.
+
+# ===== D 도어·잠금·경고 =====
+expect ign off              # 시동 OFF로 시작
+ign on                      # 시동 ON, 속도 15
+wait 1
+gear d                      # 기어 D (P면 D2에 따라 잠기지 않음. Z00에서는 W 구간에서 넘어온 상태)
+wait 1
+speed 15
+wait 2
+
+#@ D1 — 수신 중단이면 현재 잠금 상태 유지 (케이스 A: 잠김 → 잠김)
+expect lock on              # 속도 15로 잠김
+speed 0
+expect lock on              # 속도 0: 직전 상태 유지
+wait 2
+cut speed                   # 속도 신호만 끊음
+wait 0.5
+expect rxlost on            # 0.5초: 수신 중단
+gear p                      # 해제 조건 1: 기어 P
+expect lock on              # 잠금 유지
+wait 2
+ign off                     # 해제 조건 2: 시동 OFF
+expect lock on              # 잠금 유지
+wait 2
+
+ign on                      # 다시 시동 ON
+wait 1
+resume speed                # 속도 송신 재개 (속도 0)
+expect rxlost off
+wait 2
+
+#@ D2 — 시동 OFF 또는 기어 P 중 하나라도면 해제 (케이스 A: 기어 P)
+gear d
+wait 1
+speed 15
+expect lock on              # 속도 15로 잠금
+wait 2
+speed 0
+expect lock on              # 속도 0, 기어 D: 잠금 유지 (직전 상태 유지)
+wait 2
+gear p
+expect lock off             # 기어 P가 되는 순간 잠금 해제
+wait 2
+
+#@ D3 — 속도 15 km/h 이상이면 잠금
+gear d                      # 잠금 해제, 기어 D
+expect lock off             # 속도 0
+wait 2
+speed 10
+expect lock off             # 10: 해제 유지
+wait 2
+speed 15
+expect lock on              # 15가 되는 순간 잠김
+wait 2
+speed 20
+expect lock on              # 20: 잠김
+wait 2
+
+#@ D4 — 주행 중 도어 열림 경고
+speed 0                     # 다시 속도 0으로 변경
+wait 1
+door fl open
+expect warning none         # 속도 0: 경고 없음
+wait 2
+speed 5
+expect warning door         # 5가 되면 "주행 중 도어 열림"
+wait 2
+door fl close               # 문 닫음
+expect warning none         # 경고 사라짐
+expect lock on              # 잠김
+wait 2
+
+#@ D5 — 고장 표시 우선순위
+speed 8                     # 15 km/h로 1초간 가속
+wait 0.5
+speed 11
+wait 0.25
+speed 15
+wait 0.25
+expect warning none         # 1. 강우 센서 고장 전: 표시 없음
+cut rain                    # 강우 센서 고장
+wait 0.5
+expect warning rain         # 2. 강우 센서 고장
+wait 0.5
+cut lux                     # 조도 센서 고장 (1초 간격)
+wait 0.5
+expect warning lux          # 3. 조도 센서 고장 (조도 > 강우)
+wait 0.5
+door fl open                # 문 열림 (1초 간격)
+expect warning door         # 4. 주행 중 도어 열림만 표시
+wait 2
+
+speed 0                     # 속도 0으로 변경, 시동 OFF로 마무리
+wait 1
+ign off
+wait 1
+door fl close               # 정리: 문 닫고 센서 송신 재개
+resume lux
+resume rain
+wait 2

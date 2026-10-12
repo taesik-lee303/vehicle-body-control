@@ -1,0 +1,75 @@
+# Z01 조명(L) 시연: L5 → L2 → L3
+# '#@' 줄은 지금 검증하는 요구사항이다. 시뮬레이터 이벤트 로그에 빨간색으로 표시된다.
+# 시작 상태: 시동 OFF, 기어 P, 속도 0, 조도 30000, 강우 0%, 스위치 OFF, 주행 모델 OFF(속도 직접 입력)
+# 시연 문서에 시간이 정해진 구간은 그대로 두고, 시간이 없는 구간은 단계 사이에 1~2초 대기를 넣었다.
+
+# ===== L 조명 =====
+ign on                      # 이 시점에서 시동 ON
+wait 2
+
+#@ L5 — 센서 고장이면 조명을 켜고 표시
+light off
+expect headlight off        # 스위치 OFF, 전조등 꺼짐
+wait 2
+cut lux                     # 조도 송신을 끊음
+wait 0.45
+expect luxlamp off          # 0.45초: 아직 고장 아님
+wait 0.05
+expect luxlamp on           # 0.5초: 고장 표시 켜짐
+expect headlight on         #        스위치가 OFF여도 전조등 켜짐
+wait 2
+ign off                     # 시동 OFF
+expect headlight off        # 전조등은 꺼짐 (L1 > L5)
+expect luxlamp on           # 고장 표시는 유지
+wait 2
+
+#@ L2 — 1000 lux 미만 1초 연속이면 켬
+lux 1200
+resume lux                  # 조도 송신 재개 (정상 값)
+wait 1
+light auto
+wait 1
+ign on
+wait 0.05
+expect luxlamp off
+expect headlight off        # 스위치 AUTO, 전조등 꺼짐
+wait 2
+lux 1150                    # 2초 동안 서서히 낮춤
+wait 0.4
+lux 1100
+wait 0.4
+lux 1050
+wait 0.4
+lux 1000                    # 1000은 "미만"이 아님
+wait 0.4
+expect headlight off        # 1200 ~ 1000 lux: 꺼진 상태 유지
+lux 800                     # 800 lux 도달
+wait 0.95
+expect headlight off        # 0.95초: 아직
+wait 0.05
+expect headlight on         # 1초 연속 → 켜짐
+wait 2
+
+#@ L3 — 1500 lux 초과 3초 연속이면 끔
+expect headlight on         # 스위치 AUTO, 전조등 켜짐, 800 lux
+lux 1000                    # 2초 동안 서서히 올림
+wait 0.4
+lux 1200
+wait 0.4
+lux 1400
+wait 0.4
+lux 1500                    # 1500은 "초과"가 아님
+wait 0.4
+expect headlight on         # 800 ~ 1500 lux: 켜진 상태 유지
+wait 0.4
+lux 1600                    # 1600 lux 도달
+wait 2.95
+expect headlight on         # 2.95초: 아직
+wait 0.05
+expect headlight off        # 3초 연속 → 꺼짐
+wait 2
+
+ign off                     # 시동 OFF로 마무리
+wait 1
+light off
+wait 2

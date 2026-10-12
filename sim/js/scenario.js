@@ -67,6 +67,8 @@ export class ScenarioRunner {
       const line = this.lines[this.i++];
       const trimmed = line.trim();
       if (!trimmed) continue;
+      // '#@ L5 — ...': 지금 검증하는 요구사항 (로그에 빨간색). 코어에는 주석이라 보내지 않아도 된다
+      if (trimmed.startsWith('#@')) { this.log('▶ ' + trimmed.slice(2).trim(), 'req'); continue; }
       if (trimmed.startsWith('#')) { this.log(trimmed, 'comment'); continue; }
       this.log('> ' + trimmed, 'cmd');
       const ms = parseWait(trimmed);

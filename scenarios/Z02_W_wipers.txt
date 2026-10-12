@@ -1,0 +1,87 @@
+# Z02 와이퍼(W) 시연: W5 → W2 → W3
+# '#@' 줄은 지금 검증하는 요구사항이다. 시뮬레이터 이벤트 로그에 빨간색으로 표시된다.
+# 시작 상태: 시동 OFF, 기어 P, 속도 0, 조도 30000, 강우 0%, 스위치 OFF, 주행 모델 OFF(속도 직접 입력)
+# 시연 문서에 시간이 정해진 구간은 그대로 두고, 시간이 없는 구간은 단계 사이에 1~2초 대기를 넣었다.
+
+# ===== W 와이퍼 =====
+ign on                      # 이 시점 시동 ON, 속도 60으로 1초간 가속
+wait 1
+gear d
+wait 1
+speed 12
+wait 0.2
+speed 24
+wait 0.2
+speed 36
+wait 0.2
+speed 48
+wait 0.2
+speed 60
+wait 2
+
+#@ W5 — AUTO에서 강우 센서 고장이면 간헐, 고장 표시
+wiper auto
+expect wiper stop           # 스위치 AUTO, 강우량 0%: 정지
+wait 2
+cut rain                    # 강우 센서 송신을 끊음
+wait 0.45
+expect rainlamp off         # 0.45초: 아직 고장 아님
+wait 0.05
+expect rainlamp on          # 0.5초: 고장 표시 켜짐
+expect wiper int            #        와이퍼 간헐
+wait 2
+wiper off                   # 스위치 OFF
+expect wiper stop           # 정지 (W4 > W5)
+expect rainlamp on          # 고장 표시 유지
+wait 2
+ign off                     # 시동 OFF
+expect wiper stop           # 정지 (W1)
+expect rainlamp on          # 고장 표시 유지
+wait 2
+
+#@ W2 — AUTO 강우량별 단계
+rain 5
+resume rain                 # 강우 센서 송신 재개
+wait 1
+ign on
+wait 1
+wiper auto                  # 스위치 AUTO, 속도 60
+expect rainlamp off
+expect speed 60
+expect wiper stop           # 5%: 정지
+wait 2
+rain 10
+expect wiper int            # 10%: 간헐 (10 이상)
+wait 2
+rain 40
+expect wiper low            # 40%: 저속 (40 이상)
+wait 2
+rain 70
+expect wiper high           # 70%: 고속 (70 이상)
+wait 2
+
+#@ W3 — 속도 0이면 한 단계 낮춤
+expect wiper high           # 강우량 70%, 속도 60: 고속
+speed 48                    # 속도 0으로 1초간 감속
+wait 0.2
+speed 36
+wait 0.2
+speed 24
+wait 0.2
+speed 12
+wait 0.2
+expect wiper high           # 속도 12: 아직 고속
+speed 0
+expect wiper low            # 속도 0이 되는 순간 저속 (W2 고속보다 한 단계 낮음)
+wait 2
+rain 40
+expect wiper int            # 40%: 간헐 (W2 저속보다 한 단계 낮음)
+wait 2
+rain 10
+expect wiper stop           # 10%: 정지 (W2 간헐보다 한 단계 낮음)
+wait 2
+
+ign off                     # 시동 OFF로 마무리
+wait 1
+wiper off
+wait 2

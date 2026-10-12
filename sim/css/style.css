@@ -57,6 +57,7 @@ select { background: #0b0d12; border: 1px solid var(--line); border-radius: 4px;
 #log .bad { color: var(--bad); font-weight: 700; }
 #log .err { color: var(--warn); }
 #log .comment, #log .info { color: var(--dim); }
+#log .req { color: var(--bad); font-weight: 700; margin-top: 6px; }
 
 /* ---- 미니맵 (이벤트 로그 아래) ---- */
 #minimap { position: fixed; top: calc(42vh + 22px); right: 12px; padding: 6px;
