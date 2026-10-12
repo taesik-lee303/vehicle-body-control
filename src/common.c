@@ -50,12 +50,7 @@ void vbc_set_door(VbcInputs *in, DoorId door, bool open)
         in->door_open[door] = open;
 }
 
-/* 조명 스위치는 OFF·AUTO·ON 세 값만 받는다. 그 외 값은 무시하고 직전 값을 유지한다. */
-void vbc_set_light_switch(VbcInputs *in, LightSwitch sw)
-{
-    if (sw == LIGHT_SW_OFF || sw == LIGHT_SW_AUTO || sw == LIGHT_SW_ON)
-        in->light_sw = sw;
-}
+void vbc_set_light_switch(VbcInputs *in, LightSwitch sw) { in->light_sw = sw; }
 void vbc_set_wiper_switch(VbcInputs *in, WiperSwitch sw) { in->wiper_sw = sw; }
 
 /* C3: "마지막으로 들어온 지 0.5초가 지나지 않았고" → 경과 < 500ms */
