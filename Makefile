@@ -60,8 +60,7 @@ $(SIM_OUT): $(LIB_SRCS) $(HEADERS)
 SIM_PORT ?= 8080
 
 sim: wasm
-	@echo "브라우저에서 http://localhost:$(SIM_PORT)/sim/ (종료: Ctrl+C)"
-	python3 -m http.server $(SIM_PORT)
+	python3 sim/tools/serve.py $(SIM_PORT)
 
 $(BUILD):
 	mkdir -p $@

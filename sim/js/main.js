@@ -9,6 +9,7 @@ import { createWorld } from './scene/world.js';
 import { setupMinimap } from './minimap.js';
 import { createRadarPanel } from './radar-panel.js';
 import { setupPanels } from './panels.js';
+import { termLog } from './termlog.js';
 
 const RATES = [0.25, 0.5, 1, 2];
 const TICK_MS = 50;
@@ -32,6 +33,7 @@ function log(text, cls = classify(text)) {
   logEl.append(div);
   while (logEl.childElementCount > 600) logEl.firstChild.remove();
   logEl.scrollTop = logEl.scrollHeight;
+  termLog(cls, text);   // make sim 터미널에도
 }
 document.getElementById('log-clear').addEventListener('click', () => { logEl.textContent = ''; });
 
