@@ -1,0 +1,82 @@
+# C 공통 요구사항 시연 (C5 → C4 → C2 → C1 → C3)
+# 시동 OFF로 시작. 시작부터 차량 상태(속도·기어·시동)와 조도를 보내지 않는다.
+cut vehicle
+cut lux
+
+# ① C5 초기 상태 (0.000s): 소등, 와이퍼 정지, 잠금 해제, 경고 없음
+expect headlight off
+expect wiper stop
+expect lock off
+expect warning none
+
+# ② C4 수신 중단 (시작 시점 기준 0.5초)   ③ C2 조도 센서 고장도 시작 기준 0.5초
+wait 0.45
+expect rxlost off       # 0.450s
+expect luxlamp off
+wait 0.05
+expect rxlost on        # 0.500s: 차량 상태 수신 중단
+expect luxlamp on       # 0.500s: 조도 센서 고장 (③)
+
+# ② 시동 ON, 조명 스위치 ON. 기어는 계속 보내지 않음
+wait 0.5
+ign on                  # 1.000s
+light on
+resume ign
+resume speed
+expect rxlost on        # 기어 미수신 → 여전히 수신 중단
+expect headlight off    # 시동 OFF로 간주 (C4 → L1)
+wait 1
+expect headlight off    # 2.000s
+# 빠진 기어 신호를 보냄
+resume gear             # 2.000s
+expect rxlost off
+expect headlight on     # 조명 켜짐
+
+# 이 시점 시동 ON
+# ③ C2 조도 정상 값을 다시 보냄 (resume: 이 시각에 바로 보내고 이후 계속 보냄)
+wait 1
+resume lux              # 3.000s, 조도 30000
+expect luxlamp off      # 정상 값이 들어오는 순간 고장 해제
+
+# ④ C1 N초 연속 (L2: 조도 < 1000 lux 1초)
+wait 1
+light off               # 4.000s 준비: 전조등을 끈 상태에서 AUTO로
+light auto
+expect headlight off
+wait 1
+lux 800                 # 5.000s: 어두움 → L2 카운트 시작
+wait 0.9
+expect headlight off    # 5.900s: 0.9초
+lux 1200                # 5.900s: 1초 직전에 밝게 → 카운트 리셋
+# L2 카운트 리셋 (0.9초에서 멈춤)
+wait 0.1
+lux 800                 # 6.000s: 다시 어두움 → 처음부터 다시 셈
+# L2 카운트 다시 0초부터
+expect headlight off    # 6.000s: 리셋되지 않았다면 켜졌을 시각
+wait 0.95
+expect headlight off    # 6.950s: 다시 센 지 0.95초
+wait 0.05
+expect headlight on     # 7.000s: 다시 어두워진 지 1초 → 점등
+
+# ⑤ C3 유효한 속도 (D3)
+wait 1
+gear D                  # 8.000s
+speed 20
+expect lock on          # 유효한 속도 20 ≥ 15 → 잠금 (D3 동작)
+wait 1
+speed 0                 # 9.000s 준비: 기어 P로 잠금을 푼 뒤 다시 기어 D
+gear P
+expect lock off
+gear D
+speed 260               # 범위 밖 속도
+expect speed 260
+expect rxlost off       # 수신은 정상 (C4 아님)
+expect lock off         # 260은 유효한 속도가 아님 (C3) → D3 동작 안 함
+wait 1
+expect lock off         # 10.000s
+
+# 시동 OFF로 마무리
+ign off
+expect headlight off
+expect wiper stop
+expect lock off

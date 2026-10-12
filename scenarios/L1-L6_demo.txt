@@ -1,0 +1,84 @@
+# L 조명 요구사항 시연 (L1 → L5 → L4 → L6 → L2 → L3)
+# 시동 OFF로 시작
+
+# L1 시동 OFF면 꺼짐
+ign on
+light on
+expect headlight on     # 0.000s: 스위치 ON → 점등
+wait 1
+ign off                 # 1.000s
+expect headlight off    # 스위치 ON이어도 소등
+
+# 이 시점 시동 ON
+wait 1
+ign on                  # 2.000s
+
+# L5 센서 고장이면 조명을 켜고 표시
+light off
+expect headlight off    # 스위치 OFF → 소등
+wait 1
+cut lux                 # 3.000s: 조도 송신 중단
+wait 0.45
+expect luxlamp off      # 3.450s
+expect headlight off
+wait 0.05
+expect luxlamp on       # 3.500s: 0.5초 → 고장 표시
+expect headlight on     # 스위치 OFF여도 점등
+ign off                 # 3.500s
+expect headlight off    # 시동 OFF → 소등 (L1)
+expect luxlamp on       # 고장 표시는 유지
+# 준비: 조도 복구, 시동 ON
+wait 1
+resume lux              # 4.500s
+ign on
+expect luxlamp off
+
+# L4 스위치 ON/OFF
+light off
+expect headlight off
+wait 1
+light on                # 5.500s
+expect headlight on
+wait 1
+light off               # 6.500s
+expect headlight off
+
+# L6 와이퍼 10초 연속 작동
+wait 1
+light auto              # 7.500s
+expect headlight off
+wiper low               # 7.500s: 와이퍼 작동 시작
+wait 9.95
+expect headlight off    # 17.450s: 9.95초
+wait 0.05
+expect headlight on     # 17.500s: 10초 → 점등
+wait 5
+expect headlight on     # 22.500s: 작동하는 동안 유지 (15초)
+# 와이퍼 정지 (OFF 스위치)
+wiper off
+expect wiper stop
+expect headlight off    # L6 해제, 밝음(30000 lux)이 이미 3초 넘게 계속 → L3 소등
+
+# L2 1000 lux 미만 1초 연속이면 켬
+lux 1200                # 22.500s
+wait 2
+expect headlight off    # 24.500s: 1200 lux에서 꺼진 상태 유지
+lux 800                 # 24.500s
+wait 0.95
+expect headlight off    # 25.450s
+wait 0.05
+expect headlight on     # 25.500s: 800 lux 1초 → 점등
+
+# L3 1500 lux 초과 3초 연속이면 끔
+wait 2
+expect headlight on     # 27.500s: 800 lux에서 켜진 상태 유지
+lux 1600                # 27.500s
+wait 2.95
+expect headlight on     # 30.450s
+wait 0.05
+expect headlight off    # 30.500s: 1600 lux 3초 → 소등
+
+# 시동 OFF로 마무리
+wait 1
+ign off
+expect headlight off

@@ -1,0 +1,83 @@
+# W 와이퍼 요구사항 시연 (W1 → W4 → W5 → W2 → W3)
+# 시동 OFF로 시작
+
+# W1 시동 OFF면 정지
+ign on
+wiper low
+expect wiper low        # 0.000s: 저속 작동
+wait 1
+ign off                 # 1.000s
+expect wiper stop       # 스위치 LOW여도 정지
+
+# 이 시점 시동 ON, 속도 60
+wait 1
+ign on                  # 2.000s
+gear D
+speed 60
+
+# W4 스위치 OFF/LOW/HIGH
+wiper off
+expect wiper stop
+wait 1
+wiper low               # 3.000s
+expect wiper low
+wait 1
+wiper high              # 4.000s
+expect wiper high
+wait 1
+wiper off               # 5.000s
+expect wiper stop
+
+# W5 AUTO에서 강우 센서 고장이면 간헐, 고장 표시
+wait 1
+wiper auto              # 6.000s
+rain 0
+expect wiper stop       # 강우 0% → 정지
+cut rain                # 6.000s: 강우 송신 중단
+wait 0.45
+expect rainlamp off     # 6.450s
+expect wiper stop
+wait 0.05
+expect rainlamp on      # 6.500s: 0.5초 → 고장 표시
+expect wiper int        # AUTO + 고장 → 간헐
+wiper off
+expect wiper stop       # 스위치 OFF → 정지 (W4 > W5)
+expect rainlamp on      # 고장 표시 유지
+ign off
+expect wiper stop       # 시동 OFF → 정지 (W1)
+expect rainlamp on      # 고장 표시 유지
+# 준비: 강우 복구, 시동 ON, AUTO (속도 60)
+wait 1
+resume rain             # 7.500s
+ign on
+wiper auto
+expect rainlamp off
+
+# W2 AUTO 강우량별 단계 (속도 60)
+rain 5
+expect wiper stop       # 5% → 정지
+wait 1
+rain 10                 # 8.500s
+expect wiper int        # 10% 이상 → 간헐
+wait 1
+rain 40                 # 9.500s
+expect wiper low        # 40% 이상 → 저속
+wait 1
+rain 70                 # 10.500s
+expect wiper high       # 70% 이상 → 고속
+
+# W3 속도 0이면 한 단계 낮춤
+wait 1
+speed 0                 # 11.500s
+expect wiper low        # 70%: 고속 → 저속
+wait 1
+rain 40                 # 12.500s
+expect wiper int        # 40%: 저속 → 간헐
+wait 1
+rain 10                 # 13.500s
+expect wiper stop       # 10%: 간헐 → 정지
+
+# 시동 OFF로 마무리
+wait 1
+ign off
+expect wiper stop
