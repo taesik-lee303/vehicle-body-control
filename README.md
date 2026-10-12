@@ -23,8 +23,9 @@ Windows는 **WSL Ubuntu 안에서** 진행합니다 (저장소도 WSL 안, 예: 
    ```bash
    gh repo clone taesik-lee303/vehicle-body-control
    cd vehicle-body-control
-   git checkout develop
+   git checkout exp/sim-realism
    ```
+   이 README는 실험 브랜치 `exp/sim-realism`(실제 지도 + 전방 레이더·Stop & Go) 기준입니다. `develop`에는 아직 이 기능들이 없습니다.
 3. Emscripten(emsdk) 설치: C 코어를 브라우저에서 돌리기 위한 컴파일러입니다. 약 1GB, 몇 분 걸립니다.
    ```bash
    git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
@@ -55,6 +56,9 @@ three.js는 `sim/vendor/three/`에 들어 있어 따로 받지 않아도 됩니�
 | `[` `]` | 배속 0.25 · 0.5 · 1 · 2 |
 | `C` | 카메라: 추적 → 정면 → 위 → 측면 |
 | `Tab` / `H` | 툴박스 접기 / 도움말 |
+| `G` | Stop & Go 스위치 (XS1) |
+| `S` / `F` | SET (지금 속도로 작동) / RES (재출발, 이전 설정으로 작동) |
+| `-` `=` / `V` | 설정 속도 −10 / +10 km/h / 차간 시간 1.0 → 1.5 → 2.0 s |
 
 처음에는 `I` → `D` → `↑` 로 출발해 보세요.
 
@@ -68,18 +72,22 @@ three.js는 `sim/vendor/three/`에 들어 있어 따로 받지 않아도 됩니�
   - 차선·횡단보도·보도·건물·공원·가로수·가로등, 실사 하늘(낮·흐림·밤 HDRI), 곡면 차(도장 반사, 유리 너머 실내), 비와 젖은 노면, 전조등 블룸.
   - 지형은 공개 고도 자료(약 30 m 해상도)라 높이 오차가 수 m 있습니다. 세종대 건물 층수는 `sim/tools/map-overrides.json`에 적어 보정합니다.
   하늘 밝기는 조도, 흐림·비·젖은 노면은 강우량을 연속으로 비출 뿐 요구사항 판단에는 쓰지 않습니다. 도로 모양도 판단과 관계없습니다.
+- **우측 전방 맵**: 레이더 검출점·트랙·선행 차량 (아래 "전방 레이더 맵 · Stop & Go")
 - **우측 미니맵**: 경로와 차 위치, 지금 달리는 도로 이름. 지도 데이터 © OpenStreetMap contributors (ODbL).
+- **창 접기·크기 조절**: 툴박스·이벤트 로그·전방 맵·미니맵·계기판 모두 ▾/▸ 버튼으로 접고, 화면 안쪽 모서리 손잡이를 끌어 크기를 바꿉니다 (두 번 누르면 기본 크기). 크기와 접힘은 브라우저에 기억됩니다.
 - **화질**(툴박스): 기본(그림자·블룸 없음) / 표준 / 높음. 느리면 기본으로 바꾸세요. URL `?q=low`도 같습니다.
 - **실사 차 모델**(선택): `sim/assets/car.glb`를 넣으면 그 모델로 바뀝니다. 노드 이름 규칙은 `sim/assets/README.md`.
 
 시간은 시뮬레이션 시각입니다. 일시정지 중에는 시각이 흐르지 않아 수신 중단(C4)도 생기지 않습니다.
 툴박스를 바꾸지 않아도 속도·기어·시동·조도·강우량은 0.05초마다 자동으로 다시 보내집니다 (사양서 3.1).
 
-## 전방 레이더 맵 · Stop & Go (실험 브랜치 `exp/radar-stop-and-go`)
+## 전방 레이더 맵 · Stop & Go (실험 기능, 사양서 밖)
 레이더 3개(4D 이미징 1, 전방 측면 2)를 **센서 모델(가상 하드웨어)**로 만들고, 그 검출점만으로 전방 맵을 만들어 선행 차량을 따라 서고 출발합니다.
-- 툴박스 **교통 장면** → 정체 행렬, 앞차 **멈춤/출발**. `G` Stop & Go 스위치, 속도를 올리고 `S` SET, 3초 넘게 서 있으면 `F` RES.
+- 툴박스 **교통 장면** → 정체 행렬, 앞차 **멈춤/출발**, 보행자 횡단, 끼어들기, 높이 거르기(육교·맨홀). `G` Stop & Go 스위치, 속도를 올리고 `S` SET, 3초 넘게 서 있으면 `F` RES.
 - **레이더 고장 주입**으로 끊김·프레임 반복·값 고착·가림을 넣어 볼 수 있습니다. 오른쪽 **전방 맵** 패널에 검출점·트랙·선행 차량이 보입니다.
-- 시나리오 목록의 `X*` 파일이 요구사항별 장면입니다. 설계·시험·구현하며 바뀐 것: [docs/radar-stop-and-go.md](docs/radar-stop-and-go.md)
+- 시나리오: `X00_demo_all.txt`가 종합 데모, `X01`~`X08`이 요구사항별 장면입니다 (직선 도로·실제 지도 모두에서 동작).
+  예: `http://localhost:8080/sim/?scenario=X00_demo_all.txt`
+- 요구사항: [docs/radar-requirements.md](docs/radar-requirements.md), 설계·시험·구현하며 바뀐 것: [docs/radar-stop-and-go.md](docs/radar-stop-and-go.md)
 
 ## 요구사항별로 확인해 보기
 | 해 볼 것 | 기대 결과 | 요구사항 |
@@ -141,5 +149,7 @@ make run         # 터미널에서 명령으로 조작 (help 로 명령 목록)
 | `docs/console.md` | 콘솔 명령 (시나리오·URL `cmd=`에 같은 명령) |
 | `docs/sim-plan.md` | 시뮬레이터 설계와 단계 계획 |
 | `docs/verification.md` | 요구사항별 증명 기록, AI가 틀린 곳 |
+| `docs/radar-requirements.md`, `docs/radar-stop-and-go.md` | 전방 레이더·Stop & Go 실험의 가정 요구사항과 설계·시험 기록 |
+| `sim/assets/README.md` | 지도·하늘·텍스처·차 모델 자원과 출처 |
 
 협업 규칙: `main`에 직접 push하지 않습니다. 기능 브랜치 → `develop`으로 PR → 동료 리뷰 → 머지. 자세한 내용은 `CLAUDE.md`.
