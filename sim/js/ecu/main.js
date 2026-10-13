@@ -52,7 +52,8 @@ try {
 engine.onLog((line) => log(line));
 
 const runner = new TcRunner(engine, log);
-const sim = { playing: false, rate: 1, carry: 0, console: 'ecu', tc: false }; // tc: TC 재생으로 시작한 흐름
+// playing: 시간이 흐르는 중. tc: TC를 불러 둔 상태 (일시정지해도 위치 유지, ■나 TC 끝에서만 해제)
+const sim = { playing: false, rate: 1, carry: 0, console: 'ecu', tc: false };
 
 function exec(cmd) {
   log('> ' + cmd, 'cmd');
@@ -79,15 +80,18 @@ function fillScenarios() {
   scenarioSel.value = manual ? MANUAL : sim.console;
 }
 
-function setPlaying(on, tc = false) {
+// ▶/∥ 한 버튼: 흐르는 중이면 ∥(일시정지), 멈춰 있으면 ▶(재생·재개)
+function setPlaying(on) {
   sim.playing = on;
-  sim.tc = on && tc;
   sim.carry = 0;
+  playBtn.textContent = on ? '∥' : '▶';
+  playBtn.title = on ? '일시정지 (시나리오 위치 유지)' : '재생 (수동이면 시간 흐름 시작, 일시정지 중이면 이어서)';
   playBtn.classList.toggle('active', on);
 }
 
 function selectConsole(name) {
   runner.stop();
+  sim.tc = false;
   setPlaying(false);
   if (engine.select(name) !== 0) {
     log(`  ! 없는 콘솔입니다: ${name}`, 'err');
@@ -106,6 +110,19 @@ function setRate(r) {
   rateSel.value = String(r);
 }
 
+// ▶/∥: 흐르는 중이면 일시정지, 불러 둔 TC가 있으면 그 자리에서 재개, 아니면 새로 시작
+function togglePlay() {
+  if (sim.playing) {
+    setPlaying(false);
+    log(runner.active ? '∥ 일시정지 (시나리오 위치 유지, ⏭ 다음 줄)' : '∥ 일시정지 (⏭ 판단 주기 하나)', 'info');
+  } else if (runner.active) {
+    setPlaying(true);
+    log('▶ 이어서 재생', 'info');
+  } else {
+    play();
+  }
+}
+
 async function play() {
   if (scenarioSel.value === MANUAL) {
     runner.stop();
@@ -122,25 +139,29 @@ async function play() {
   const text = await res.text();
   if (name !== sim.console) return; // 읽는 사이 콘솔이 바뀜
   runner.start(name, text);
-  setPlaying(true, true);
+  sim.tc = true;
+  setPlaying(true);
 }
 
 function stop() {
   const was = runner.active || sim.playing;
   runner.stop();
+  sim.tc = false;
   setPlaying(false);
-  if (was) log('■ 정지 (시각 멈춤)', 'info');
+  if (was) log('■ 정지 (시나리오 끝냄, 시각 멈춤)', 'info');
 }
 
-// ⏭: 재생 중이면 다음 줄, 아니면 판단 주기 하나(step_ms)
+// ⏭: 시나리오를 불러 두었으면 다음 줄(진행 중인 t가 있으면 그 t를 끝까지), 아니면 판단 주기 하나(step_ms).
+// 일시정지 중 ⏭로 1ms짜리 TC 시점(TC-ECU-L6-02, C4-02 등)을 한 줄씩 본다. 누를 때마다 바로 다시 그린다
 function step() {
   if (runner.active) runner.next();
   else engine.advance(engine.state().step_ms || 1);
+  draw();
 }
 
 consoleSel.addEventListener('change', () => selectConsole(consoleSel.value));
 rateSel.addEventListener('change', () => setRate(Number(rateSel.value)));
-playBtn.addEventListener('click', () => { play(); });
+playBtn.addEventListener('click', togglePlay);
 $('stop').addEventListener('click', stop);
 $('step').addEventListener('click', step);
 
@@ -184,11 +205,23 @@ selectConsole(CONSOLES.some(([n]) => n === want) ? want : 'ecu');
 const speed = Number(params.get('speed'));
 setRate(speed > 0 ? speed : 1);
 loading.remove();
-log('준비됨. 콘솔과 시나리오를 고르고 ▶ (수동이면 시간만 흐름). 입력 패널 조작은 콘솔 명령으로 실행됩니다', 'info');
+log('준비됨. 콘솔과 시나리오를 고르고 ▶ (수동이면 시간만 흐름). ∥ 일시정지 중 ⏭는 한 줄씩. 입력 패널 조작은 콘솔 명령으로 실행됩니다', 'info');
 const tcParam = params.get('tc');
 if (tcParam && tcParam !== '0') {
   scenarioSel.value = sim.console;
   play();
+}
+
+// 상태를 읽어 그린다. TC가 끝났으면 시각을 멈춰 끝 상태를 보여 준다
+function draw() {
+  if (sim.tc && !runner.active) {
+    sim.tc = false;
+    setPlaying(false);
+  }
+  const st = engine.state();
+  renderBar(st);
+  diagram.render(st);
+  panel.render(st);
 }
 
 // ---- 루프: 벽시계 × 배속만큼 시뮬 시간을 흘리고, 상태를 읽어 그린다 ----
@@ -197,11 +230,7 @@ function frame(now) {
   const dt = Math.min(now - last, MAX_FRAME_MS);
   last = now;
   if (sim.playing) advance(dt * sim.rate, engine.state());
-  if (sim.tc && !runner.active) setPlaying(false); // TC가 끝나면 시각을 멈춰 끝 상태를 보여 준다
-  const st = engine.state();
-  renderBar(st);
-  diagram.render(st);
-  panel.render(st);
+  draw();
   requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);
