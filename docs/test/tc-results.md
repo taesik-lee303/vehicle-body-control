@@ -1,6 +1,6 @@
 # 모듈별 테스트 케이스 실행 결과
 
-> 자동 생성 문서 (`make tc`, 2026-10-08 13:03, 커밋 `1205f0d` (커밋 안 된 변경 포함)). 손으로 고치지 마세요.
+> 자동 생성 문서 (`make tc`, 2026-10-13 14:00, 커밋 `13721db` (커밋 안 된 변경 포함)). 손으로 고치지 마세요.
 > TC 정의: `tools/consoles/tc/<모듈>.txt`, 실행 로그(증거): `docs/test/logs/<모듈>.log`. 사용법은 `docs/test/README.md`.
 
 판정: **PASS** 사양서에서 계산한 기대와 같음 / **FAIL** 다름 / **관찰** 사양서에 정해지지 않은 동작이라 기대 없이 기록만 함.
@@ -9,10 +9,39 @@
 
 | 모듈 | TC | PASS | FAIL | 관찰 포함 | 확인(e) 건수 | 관찰(obs) 건수 |
 |---|---|---|---|---|---|---|
+| BCU 전체 (ECU) | 21 | 21 | 0 | 0 | 59 | 0 |
 | 도어·잠금 (D1~D3) | 30 | 29 | 0 | 5 | 40 | 7 |
 | 계기판 경고 (D4·D5) | 23 | 23 | 0 | 3 | 30 | 3 |
 | 조명 (L1~L6) | 32 | 30 | 0 | 4 | 42 | 6 |
 | 와이퍼 (W1~W5) | 24 | 24 | 0 | 1 | 50 | 1 |
+
+## BCU 전체 (ECU)
+
+실행: `./build/con_ecu < tools/consoles/tc/ecu.txt` · 로그: `docs/test/logs/ecu.log`
+
+| TC ID | 요구사항 | 기법 | 입력 | 기대 (사양서) | 실제 | 판정 |
+|---|---|---|---|---|---|---|
+| TC-ECU-C5-01 | C5 | 시작 상태 | 초기 상태 | 전조등 꺼짐, 와이퍼 정지, 풀림, 경고 없음 | 기대와 같음 (확인 4건: headlight=off, wiper=stop, lock=off, warning=none) | PASS |
+| TC-ECU-L6-01 | L6, C1, W4 | 경계값(시간 3-value) | 시동 ON, D, 속도 50, 조명 AUTO, 조도 1200, 와이퍼 LOW, 9.999초 | 와이퍼 저속, 전조등 꺼짐 | 기대와 같음 (확인 2건: wiper=low, headlight=off) | PASS |
+| TC-ECU-L6-02 | L6, C1 | 경계값(시간 3-value) | 이어서 +1ms (10.000초) | 켜짐 | 기대와 같음 (확인 1건: headlight=on) | PASS |
+| TC-ECU-L6-03 | L6, C1 | 경계값(시간 3-value) | 이어서 +1ms (10.001초) | 켜짐 | 기대와 같음 (확인 1건: headlight=on) | PASS |
+| TC-ECU-L6-04 | L6, L3 | 상태 전이(직전 유지) | 이어서 와이퍼 OFF, 3초 (조도 1200) | 와이퍼 정지, 전조등 켜짐 유지 (L3: 어느 규칙도 정하지 않음) | 기대와 같음 (확인 2건: wiper=stop, headlight=on) | PASS |
+| TC-ECU-L6-05 | L6, C1 | 재성립(처음부터) | 처음부터: 와이퍼 LOW 5초 → OFF 1초 → LOW 9.999초 | 꺼짐 | 기대와 같음 (확인 1건: headlight=off) | PASS |
+| TC-ECU-L6-06 | L6, C1 | 재성립(처음부터) | 이어서 +1ms (다시 LOW 후 10.000초) | 켜짐 | 기대와 같음 (확인 1건: headlight=on) | PASS |
+| TC-ECU-L6-07 | L6, W2, W3 | 결정 테이블 | 처음부터: 와이퍼 AUTO, 강우 10, 속도 0, 조명 AUTO, 조도 1200, 10초 | 와이퍼 정지 (W2 간헐을 W3로 낮춤), 전조등 꺼짐 | 기대와 같음 (확인 2건: wiper=stop, headlight=off) | PASS |
+| TC-ECU-L6-08 | L6, W2, W3, C1 | 결정 테이블 + 경계값 | 이어서 속도 1 → 9.999초 → +1ms | 와이퍼 간헐, 9.999초 꺼짐, 10.000초 켜짐 | 기대와 같음 (확인 3건: wiper=int, headlight=off, headlight=on) | PASS |
+| TC-ECU-D5-01 | D5, L5, L4, W5, W4 | 결정 테이블 | 처음부터: 시동 ON, D, 속도 30, 조도 60001, 강우 101 (스위치 둘 다 OFF) | 경고 조도 고장, 고장 표시 둘 다 켜짐, 전조등 켜짐 (L5 > L4), 와이퍼 정지 (W4) | 기대와 같음 (확인 7건: luxfault=yes, rainfault=yes, warning=lux, luxlamp=on, rainlamp=on, headlight=on, wiper=stop) | PASS |
+| TC-ECU-D5-02 | D5, D4 | 결정 테이블 | 이어서 FL 열림 | 주행 중 도어 열림 | 기대와 같음 (확인 1건: warning=door) | PASS |
+| TC-ECU-D5-03 | D5 | 결정 테이블 | 이어서 FL 닫힘 | 조도 고장 | 기대와 같음 (확인 1건: warning=lux) | PASS |
+| TC-ECU-D5-04 | D5, L5, L4 | 결정 테이블 | 이어서 조도 30000 | 경고 강우 고장, 조도 고장 표시 꺼짐, 전조등 꺼짐 (L4 OFF) | 기대와 같음 (확인 3건: warning=rain, luxlamp=off, headlight=off) | PASS |
+| TC-ECU-D5-05 | D5, W5 | 결정 테이블 | 이어서 강우 50 | 경고 없음, 강우 고장 표시 꺼짐 | 기대와 같음 (확인 2건: warning=none, rainlamp=off) | PASS |
+| TC-ECU-D5-06 | D4, D5, C3 | 경계값(속도 3-value) | 이어서 조도 60001, FR 열림, 속도 0 | 조도 고장 (속도 0은 D4 아님) | 기대와 같음 (확인 1건: warning=lux) | PASS |
+| TC-ECU-D5-07 | D4, D5 | 경계값(속도 3-value) | 이어서 속도 1 | 주행 중 도어 열림 | 기대와 같음 (확인 1건: warning=door) | PASS |
+| TC-ECU-D5-08 | D4, D5, C3 | 동치(무효: 0 미만) | 이어서 속도 -1 | 유효한 속도 아님 → 조도 고장 | 기대와 같음 (확인 2건: speedvalid=no, warning=lux) | PASS |
+| TC-ECU-C4-01 | C4, L4, W4, D3, D4 | 경계값(시간 3-value) | 처음부터: 시동 ON, D, 속도 30, 조명 ON, 와이퍼 LOW, FL 열림 → 차량 상태 끊기, 0.499초 | 수신 중단 아님: 켜짐, 저속, 잠김, 도어 열림 경고 | 기대와 같음 (확인 9건: headlight=on, wiper=low, lock=on, warning=door, rxlost=no, headlight=on, wiper=low, lock=on, warning=door) | PASS |
+| TC-ECU-C4-02 | C4, L1, W1, D1, C3, D4 | 경계값(시간 3-value) | 이어서 +1ms (0.500초) | 수신 중단: 전조등 꺼짐, 와이퍼 정지, 잠김 유지, 경고 없음 (유효한 속도 아님) | 기대와 같음 (확인 5건: rxlost=yes, headlight=off, wiper=stop, lock=on, warning=none) | PASS |
+| TC-ECU-C4-03 | C4, L1, W1, D1 | 경계값(시간 3-value) | 이어서 +1ms (0.501초) | 같음 | 기대와 같음 (확인 5건: rxlost=yes, headlight=off, wiper=stop, lock=on, warning=none) | PASS |
+| TC-ECU-C4-04 | C4, L4, W4, D3, D4 | 정상 복귀 | 이어서 차량 상태 송신 재개 | 켜짐, 저속, 잠김, 도어 열림 경고 | 기대와 같음 (확인 5건: rxlost=no, headlight=on, wiper=low, lock=on, warning=door) | PASS |
 
 ## 도어·잠금 (D1~D3)
 
@@ -157,30 +186,30 @@
 
 | 요구사항 | TC 수 | TC |
 |---|---|---|
-| C1 | 11 | TC-L2-01, TC-L2-02, TC-L2-04, TC-L2-05, TC-L3-01, TC-L3-02, TC-L2-06, TC-L6-01, TC-L6-02, TC-L6-04, TC-L6-07 |
+| C1 | 17 | TC-ECU-L6-01, TC-ECU-L6-02, TC-ECU-L6-03, TC-ECU-L6-05, TC-ECU-L6-06, TC-ECU-L6-08, TC-L2-01, TC-L2-02, TC-L2-04, TC-L2-05, TC-L3-01, TC-L3-02, TC-L2-06, TC-L6-01, TC-L6-02, TC-L6-04, TC-L6-07 |
 | C2 | 10 | TC-D5-05, TC-D5-06, TC-D5-07, TC-L5-02, TC-L5-03, TC-L5-04, TC-L5-06, TC-W2-04, TC-W5-03, TC-W5-04 |
-| C3 | 12 | TC-D3-05, TC-D3-06, TC-D3-07, TC-D4-04, TC-D4-05, TC-D4-06, TC-D4-09, TC-D4-10, TC-D4-11, TC-W3-02, TC-W3-03, TC-W3-04 |
-| C4 | 5 | TC-D1-01, TC-D1-02, TC-D1-03, TC-L-C4-01, TC-W-C4-01 |
-| C5 | 4 | TC-D-C5-01, TC-E-C5-01, TC-L-C5-01, TC-W-C5-01 |
-| D1 | 9 | TC-D1-01, TC-D1-02, TC-D1-03, TC-D1-04, TC-D1-05, TC-D1-06, TC-D1-07, TC-D1-08, TC-D1-09 |
+| C3 | 15 | TC-ECU-D5-06, TC-ECU-D5-08, TC-ECU-C4-02, TC-D3-05, TC-D3-06, TC-D3-07, TC-D4-04, TC-D4-05, TC-D4-06, TC-D4-09, TC-D4-10, TC-D4-11, TC-W3-02, TC-W3-03, TC-W3-04 |
+| C4 | 9 | TC-ECU-C4-01, TC-ECU-C4-02, TC-ECU-C4-03, TC-ECU-C4-04, TC-D1-01, TC-D1-02, TC-D1-03, TC-L-C4-01, TC-W-C4-01 |
+| C5 | 5 | TC-ECU-C5-01, TC-D-C5-01, TC-E-C5-01, TC-L-C5-01, TC-W-C5-01 |
+| D1 | 11 | TC-ECU-C4-02, TC-ECU-C4-03, TC-D1-01, TC-D1-02, TC-D1-03, TC-D1-04, TC-D1-05, TC-D1-06, TC-D1-07, TC-D1-08, TC-D1-09 |
 | D2 | 7 | TC-D2-01, TC-D2-02, TC-D2-03, TC-D1-04, TC-D1-05, TC-D2-04, TC-D2-05 |
-| D3 | 12 | TC-D3-01, TC-D3-02, TC-D3-03, TC-D3-04, TC-D3-05, TC-D3-06, TC-D3-07, TC-D3-08, TC-D3-09, TC-D2-03, TC-D1-07, TC-D3-10 |
-| D4 | 11 | TC-D4-01, TC-D4-02, TC-D4-03, TC-D4-04, TC-D4-05, TC-D4-06, TC-D4-07, TC-D4-08, TC-D4-09, TC-D4-10, TC-D4-11 |
-| D5 | 8 | TC-D5-01, TC-D5-02, TC-D5-03, TC-D5-04, TC-D5-05, TC-D5-06, TC-D5-07, TC-D5-08 |
-| L1 | 3 | TC-L1-01, TC-L5-05, TC-L-C4-01 |
+| D3 | 14 | TC-ECU-C4-01, TC-ECU-C4-04, TC-D3-01, TC-D3-02, TC-D3-03, TC-D3-04, TC-D3-05, TC-D3-06, TC-D3-07, TC-D3-08, TC-D3-09, TC-D2-03, TC-D1-07, TC-D3-10 |
+| D4 | 18 | TC-ECU-D5-02, TC-ECU-D5-06, TC-ECU-D5-07, TC-ECU-D5-08, TC-ECU-C4-01, TC-ECU-C4-02, TC-ECU-C4-04, TC-D4-01, TC-D4-02, TC-D4-03, TC-D4-04, TC-D4-05, TC-D4-06, TC-D4-07, TC-D4-08, TC-D4-09, TC-D4-10, TC-D4-11 |
+| D5 | 16 | TC-ECU-D5-01, TC-ECU-D5-02, TC-ECU-D5-03, TC-ECU-D5-04, TC-ECU-D5-05, TC-ECU-D5-06, TC-ECU-D5-07, TC-ECU-D5-08, TC-D5-01, TC-D5-02, TC-D5-03, TC-D5-04, TC-D5-05, TC-D5-06, TC-D5-07, TC-D5-08 |
+| L1 | 5 | TC-ECU-C4-02, TC-ECU-C4-03, TC-L1-01, TC-L5-05, TC-L-C4-01 |
 | L2 | 6 | TC-L2-01, TC-L2-02, TC-L2-03, TC-L2-04, TC-L2-05, TC-L2-06 |
-| L3 | 5 | TC-L3-01, TC-L3-02, TC-L3-03, TC-L3-04, TC-L6-04 |
-| L4 | 4 | TC-L1-01, TC-L4-01, TC-L4-02, TC-L5-01 |
-| L5 | 6 | TC-L5-01, TC-L5-02, TC-L5-03, TC-L5-04, TC-L5-05, TC-L5-06 |
-| L6 | 8 | TC-L6-01, TC-L6-02, TC-L6-03, TC-L6-04, TC-L6-05, TC-L6-06, TC-L6-07, TC-L-IF-01 |
+| L3 | 6 | TC-ECU-L6-04, TC-L3-01, TC-L3-02, TC-L3-03, TC-L3-04, TC-L6-04 |
+| L4 | 8 | TC-ECU-D5-01, TC-ECU-D5-04, TC-ECU-C4-01, TC-ECU-C4-04, TC-L1-01, TC-L4-01, TC-L4-02, TC-L5-01 |
+| L5 | 8 | TC-ECU-D5-01, TC-ECU-D5-04, TC-L5-01, TC-L5-02, TC-L5-03, TC-L5-04, TC-L5-05, TC-L5-06 |
+| L6 | 16 | TC-ECU-L6-01, TC-ECU-L6-02, TC-ECU-L6-03, TC-ECU-L6-04, TC-ECU-L6-05, TC-ECU-L6-06, TC-ECU-L6-07, TC-ECU-L6-08, TC-L6-01, TC-L6-02, TC-L6-03, TC-L6-04, TC-L6-05, TC-L6-06, TC-L6-07, TC-L-IF-01 |
 | Q8 | 4 | TC-D-Q8-01, TC-D-Q8-02, TC-D-Q8-03, TC-E-Q8-01 |
 | Q9 | 4 | TC-D-Q9-01, TC-D-Q9-02, TC-L-Q9-01, TC-W-Q9-01 |
 | Q10 | 2 | TC-E-Q10-01, TC-E-Q10-02 |
 | Q11 | 2 | TC-L-Q11-01, TC-L-Q11-02 |
 | SWR-W4-005 | 2 | TC-W-SWR-01, TC-W-SWR-02 |
-| W1 | 3 | TC-W1-01, TC-W5-05, TC-W-C4-01 |
-| W2 | 4 | TC-W2-01, TC-W2-02, TC-W2-03, TC-W2-04 |
-| W3 | 5 | TC-W3-01, TC-W3-02, TC-W3-03, TC-W3-04, TC-W5-02 |
-| W4 | 5 | TC-W1-01, TC-W4-01, TC-W4-02, TC-W4-03, TC-W4-04 |
-| W5 | 7 | TC-W4-04, TC-W5-01, TC-W5-02, TC-W5-03, TC-W5-04, TC-W5-05, TC-W5-06 |
+| W1 | 5 | TC-ECU-C4-02, TC-ECU-C4-03, TC-W1-01, TC-W5-05, TC-W-C4-01 |
+| W2 | 6 | TC-ECU-L6-07, TC-ECU-L6-08, TC-W2-01, TC-W2-02, TC-W2-03, TC-W2-04 |
+| W3 | 7 | TC-ECU-L6-07, TC-ECU-L6-08, TC-W3-01, TC-W3-02, TC-W3-03, TC-W3-04, TC-W5-02 |
+| W4 | 9 | TC-ECU-L6-01, TC-ECU-D5-01, TC-ECU-C4-01, TC-ECU-C4-04, TC-W1-01, TC-W4-01, TC-W4-02, TC-W4-03, TC-W4-04 |
+| W5 | 9 | TC-ECU-D5-01, TC-ECU-D5-05, TC-W4-04, TC-W5-01, TC-W5-02, TC-W5-03, TC-W5-04, TC-W5-05, TC-W5-06 |
 

@@ -1,0 +1,154 @@
+# BCU 전체(ECU) 테스트 케이스 (make con-ecu: 와이퍼 → 조명 → 도어 → 계기판을 vbc_step과 같은 순서로 실행)
+# 모듈 TC가 볼 수 없는 SWC 간 상호작용만 시험한다: L6 와이퍼→조명, D5 경고 우선순위, C4 수신 중단 시 SWC 4개 동시 반응.
+# 시작 상태: 시동 OFF, 기어 P, 속도 0, 조도 30000, 강우 0, 스위치 OFF, 도어 닫힘. 주기 신호는 50ms마다 자동 송신.
+# 기대값은 사양서 VBC-SRS-001 v1.0 4장(C1~C5), 5.1(L1·L3·L4·L5·L6), 5.2(W1~W5), 5.3(D1·D3·D4·D5).
+
+tc TC-ECU-C5-01 | C5 | 시작 상태 | 초기 상태 | 전조등 꺼짐, 와이퍼 정지, 풀림, 경고 없음
+e headlight off
+e wiper stop
+e lock off
+e warning none
+
+# L6: 와이퍼 SWC 출력이 조명 SWC로 넘어간다. 조도 1200은 L2(<1000)·L3(>1500) 어느 쪽도 아님
+tc TC-ECU-L6-01 | L6, C1, W4 | 경계값(시간 3-value) | 시동 ON, D, 속도 50, 조명 AUTO, 조도 1200, 와이퍼 LOW, 9.999초 | 와이퍼 저속, 전조등 꺼짐
+ign on
+gear d
+speed 50
+light auto
+lux 1200
+wiper low
+e wiper low
+t 9.999
+e headlight off
+tc TC-ECU-L6-02 | L6, C1 | 경계값(시간 3-value) | 이어서 +1ms (10.000초) | 켜짐
+t 0.001
+e headlight on
+tc TC-ECU-L6-03 | L6, C1 | 경계값(시간 3-value) | 이어서 +1ms (10.001초) | 켜짐
+t 0.001
+e headlight on
+tc TC-ECU-L6-04 | L6, L3 | 상태 전이(직전 유지) | 이어서 와이퍼 OFF, 3초 (조도 1200) | 와이퍼 정지, 전조등 켜짐 유지 (L3: 어느 규칙도 정하지 않음)
+wiper off
+e wiper stop
+t 3
+e headlight on
+tc TC-ECU-L6-05 | L6, C1 | 재성립(처음부터) | 처음부터: 와이퍼 LOW 5초 → OFF 1초 → LOW 9.999초 | 꺼짐
+r
+ign on
+gear d
+speed 50
+light auto
+lux 1200
+wiper low
+t 5
+wiper off
+t 1
+wiper low
+t 9.999
+e headlight off
+tc TC-ECU-L6-06 | L6, C1 | 재성립(처음부터) | 이어서 +1ms (다시 LOW 후 10.000초) | 켜짐
+t 0.001
+e headlight on
+tc TC-ECU-L6-07 | L6, W2, W3 | 결정 테이블 | 처음부터: 와이퍼 AUTO, 강우 10, 속도 0, 조명 AUTO, 조도 1200, 10초 | 와이퍼 정지 (W2 간헐을 W3로 낮춤), 전조등 꺼짐
+r
+ign on
+gear d
+speed 0
+light auto
+lux 1200
+wiper auto
+rain 10
+e wiper stop
+t 10
+e headlight off
+tc TC-ECU-L6-08 | L6, W2, W3, C1 | 결정 테이블 + 경계값 | 이어서 속도 1 → 9.999초 → +1ms | 와이퍼 간헐, 9.999초 꺼짐, 10.000초 켜짐
+speed 1
+e wiper int
+t 9.999
+e headlight off
+t 0.001
+e headlight on
+
+# D5: 조도 60001·강우 101은 범위 밖이라 받는 즉시 고장 (C2)
+tc TC-ECU-D5-01 | D5, L5, L4, W5, W4 | 결정 테이블 | 처음부터: 시동 ON, D, 속도 30, 조도 60001, 강우 101 (스위치 둘 다 OFF) | 경고 조도 고장, 고장 표시 둘 다 켜짐, 전조등 켜짐 (L5 > L4), 와이퍼 정지 (W4)
+r
+ign on
+gear d
+speed 30
+lux 60001
+rain 101
+e luxfault yes
+e rainfault yes
+e warning lux
+e luxlamp on
+e rainlamp on
+e headlight on
+e wiper stop
+tc TC-ECU-D5-02 | D5, D4 | 결정 테이블 | 이어서 FL 열림 | 주행 중 도어 열림
+fl open
+e warning door
+tc TC-ECU-D5-03 | D5 | 결정 테이블 | 이어서 FL 닫힘 | 조도 고장
+fl close
+e warning lux
+tc TC-ECU-D5-04 | D5, L5, L4 | 결정 테이블 | 이어서 조도 30000 | 경고 강우 고장, 조도 고장 표시 꺼짐, 전조등 꺼짐 (L4 OFF)
+lux 30000
+e warning rain
+e luxlamp off
+e headlight off
+tc TC-ECU-D5-05 | D5, W5 | 결정 테이블 | 이어서 강우 50 | 경고 없음, 강우 고장 표시 꺼짐
+rain 50
+e warning none
+e rainlamp off
+tc TC-ECU-D5-06 | D4, D5, C3 | 경계값(속도 3-value) | 이어서 조도 60001, FR 열림, 속도 0 | 조도 고장 (속도 0은 D4 아님)
+lux 60001
+fr open
+speed 0
+e warning lux
+tc TC-ECU-D5-07 | D4, D5 | 경계값(속도 3-value) | 이어서 속도 1 | 주행 중 도어 열림
+speed 1
+e warning door
+tc TC-ECU-D5-08 | D4, D5, C3 | 동치(무효: 0 미만) | 이어서 속도 -1 | 유효한 속도 아님 → 조도 고장
+speed -1
+e speedvalid no
+e warning lux
+
+# C4: 차량 상태(속도·기어·시동) 송신을 0초에 끊는다 → 마지막 수신 0초. 조도·강우는 계속 송신
+tc TC-ECU-C4-01 | C4, L4, W4, D3, D4 | 경계값(시간 3-value) | 처음부터: 시동 ON, D, 속도 30, 조명 ON, 와이퍼 LOW, FL 열림 → 차량 상태 끊기, 0.499초 | 수신 중단 아님: 켜짐, 저속, 잠김, 도어 열림 경고
+r
+ign on
+gear d
+speed 30
+light on
+wiper low
+fl open
+e headlight on
+e wiper low
+e lock on
+e warning door
+cut vehicle
+t 0.499
+e rxlost no
+e headlight on
+e wiper low
+e lock on
+e warning door
+tc TC-ECU-C4-02 | C4, L1, W1, D1, C3, D4 | 경계값(시간 3-value) | 이어서 +1ms (0.500초) | 수신 중단: 전조등 꺼짐, 와이퍼 정지, 잠김 유지, 경고 없음 (유효한 속도 아님)
+t 0.001
+e rxlost yes
+e headlight off
+e wiper stop
+e lock on
+e warning none
+tc TC-ECU-C4-03 | C4, L1, W1, D1 | 경계값(시간 3-value) | 이어서 +1ms (0.501초) | 같음
+t 0.001
+e rxlost yes
+e headlight off
+e wiper stop
+e lock on
+e warning none
+tc TC-ECU-C4-04 | C4, L4, W4, D3, D4 | 정상 복귀 | 이어서 차량 상태 송신 재개 | 켜짐, 저속, 잠김, 도어 열림 경고
+resume vehicle
+e rxlost no
+e headlight on
+e wiper low
+e lock on
+e warning door

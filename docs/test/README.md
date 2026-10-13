@@ -29,6 +29,7 @@
 make test        # 기존 단위 테스트 (코어·모듈)
 make tc          # 모듈별 TC 전체 실행 → docs/test/tc-results.md, docs/test/logs/*.log 갱신
 make con-doors   # 대화형: con-dashboard, con-lighting, con-wipers
+make con-ecu     # 대화형: BCU 전체 (SWC 4개 연동)
 ./build/con_doors < tools/consoles/tc/doors.txt     # TC 파일 하나만
 ```
 `make tc`는 FAIL이 하나라도 있으면 실패(종료 코드 1)합니다.

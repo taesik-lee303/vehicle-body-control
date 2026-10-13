@@ -21,6 +21,7 @@ OUT_DIR = ROOT / "docs" / "test"
 LOG_DIR = OUT_DIR / "logs"
 
 MODULES = [
+    ("ecu", "BCU 전체 (ECU)"),
     ("doors", "도어·잠금 (D1~D3)"),
     ("dashboard", "계기판 경고 (D4·D5)"),
     ("lighting", "조명 (L1~L6)"),
