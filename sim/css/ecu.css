@@ -55,6 +55,11 @@ body { display: grid; grid-template-columns: 250px 1fr; grid-template-rows: auto
 #panel .checks { display: grid; grid-template-columns: 1fr 1fr; gap: 2px 8px; }
 #panel .checks label { cursor: pointer; user-select: none; }
 #panel .dim { color: var(--dim); font-size: 12px; }
+#panel .drive { border-top: 1px solid var(--line); padding-top: 8px; }
+#panel .drive .label + .row, #panel .drive .seg + .label { margin-top: 6px; }
+#panel .drive .dim { margin-top: 4px; }
+#panel button.brake.active { background: var(--bad); border-color: var(--bad); color: #fff; }
+#panel .drive.off .row button { opacity: 0.5; } /* drive off: 페달은 흐리게 (누르면 엔진이 '!'로 알려 줌) */
 
 /* ---- 구성도 (SVG) ---- */
 #stage { min-width: 0; min-height: 0; padding: 6px; }
@@ -110,6 +115,37 @@ body { display: grid; grid-template-columns: 250px 1fr; grid-template-rows: auto
 #diagram .arrow.link.inject .head, #diagram .arrow.link.inject .lbl { fill: var(--warn); }
 #diagram .link-cap { fill: var(--dim); font-size: 11px; }
 #diagram .hidden { display: none; }
+
+/* 운전자 인터페이스: 점선 묶음 (조명·와이퍼 스위치, ECU 콘솔은 운전 조작 4개까지) */
+#diagram .if-frame { fill: none; stroke: #4b5568; stroke-width: 1.2; stroke-dasharray: 5 4; }
+#diagram .if-title { fill: var(--dim); font-size: 11px; font-weight: 600; }
+#diagram .drv-name { font-size: 12px; font-weight: 700; }
+#diagram .arrow .lbl.end { text-anchor: end; }
+
+/* 주행 체인 (ECU 콘솔, R1~R5): 제동/구동 통합 ECU → drive.c 주행 모델 → 차량 ego 모델 [가정] → ign·gear·speed.
+   drive on이면 밝게(초록 테두리·그림자), off면 흐리게 */
+#diagram .chain-box .body { fill: #1b2029; stroke: #4b5568; }
+#diagram .drive .badge rect { fill: #262b35; }
+#diagram .drive .mode { font-size: 13px; font-weight: 700; fill: var(--dim); }
+#diagram .drive-val { font: 12px var(--mono); }
+#diagram .chain-box.on .body { fill: oklch(0.32 0.06 150); stroke: var(--ok); stroke-width: 2; }
+#diagram .drive.on .badge rect { fill: var(--ok); }
+#diagram .drive.on .mode { fill: #10141b; }
+#diagram .chain-box.on { filter: drop-shadow(0 0 6px rgba(92, 214, 138, 0.55)); }
+#diagram .chain-box.off { opacity: 0.4; }
+/* ego는 시뮬레이터 가정(사양서 요구사항 아님): 점선 테두리 + [가정] 표시 */
+#diagram .ego .body, #diagram .ego.on .body { stroke-dasharray: 6 4; }
+#diagram .ego.on .body { fill: oklch(0.28 0.04 150); }
+#diagram .assume { fill: var(--warn); font-size: 11px; font-weight: 700; }
+#diagram .arrow.feed .shaft, #diagram .arrow.chain .shaft, #diagram .arrow.drv .shaft { stroke: var(--ok); }
+#diagram .arrow.feed .head, #diagram .arrow.chain .head, #diagram .arrow.drv .head { fill: var(--ok); }
+#diagram .arrow.chain .lbl { font-size: 11px; fill: #c9ced8; }
+/* 요청 거부(R1, R2): 통합 ECU → drive.c 화살표 라벨에 ✘ 표시 */
+#diagram .arrow.chain .lbl .bad { fill: var(--bad); font-weight: 700; }
+#diagram .arrow.chain.refused .shaft { stroke: var(--bad); stroke-dasharray: 6 4; }
+#diagram .arrow.chain.refused .head { fill: var(--bad); }
+#diagram.flow-mode .chain-box, #diagram.flow-mode .chain-box .body, #diagram.flow-mode .drive .badge rect, #diagram.flow-mode .drive .mode {
+  transition: fill 0.3s ease, stroke 0.3s ease, opacity 0.3s ease, filter 0.3s ease; }
 
 /* SWC: 이 콘솔에서 실행하면 진하게, 아니면 흐리게 */
 #diagram .swc.active .body { fill: #1f2d44; stroke: var(--accent); stroke-width: 2; }

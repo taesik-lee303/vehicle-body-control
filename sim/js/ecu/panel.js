@@ -132,6 +132,47 @@ export function createPanel(el, exec) {
     });
   }
 
+  // 주행 모델 (ECU 콘솔, R1~R5): drive on|off 토글과 페달 (pedal <스로틀 0|1|2> <브레이크 0|1>).
+  // 페달은 누르고 있는 상태라 스로틀을 바꿀 때 지금 브레이크를, 브레이크를 바꿀 때 지금 스로틀을 함께 보낸다
+  function driveGroup() {
+    const THROTTLE = [['none', '없음'], ['normal', '보통'], ['full', '풀']];
+    let cur = { throttle: 0, brake: 0 };
+    const g = h('div', { class: 'group drive' }, el);
+    const head = h('div', { class: 'label' }, g);
+    h('span', {}, head, '주행 모델 (R1~R5) · drive');
+    const out = h('output', {}, head);
+    const seg = h('div', { class: 'seg' }, g);
+    const onOff = ['off', 'on'].map((w) => {
+      const b = h('button', {}, seg, w.toUpperCase());
+      b.addEventListener('click', () => exec(`drive ${w}`));
+      return b;
+    });
+    const phead = h('div', { class: 'label' }, g);
+    h('span', {}, phead, '페달 · pedal');
+    const pout = h('output', {}, phead);
+    const row = h('div', { class: 'row' }, g);
+    const tseg = h('div', { class: 'seg' }, row);
+    const tbtn = THROTTLE.map(([, label], i) => {
+      const b = h('button', { title: `스로틀 ${i} (pedal ${i} <브레이크>)` }, tseg, label);
+      b.addEventListener('click', () => exec(`pedal ${i} ${cur.brake}`));
+      return b;
+    });
+    const brake = h('button', { class: 'brake', title: '브레이크 밟기/떼기 (pedal <스로틀> 1|0)' }, row, '브레이크');
+    brake.addEventListener('click', () => exec(`pedal ${cur.throttle} ${cur.brake ? 0 : 1}`));
+    const note = h('div', { class: 'dim' }, g);
+    syncs.push((st) => {
+      const d = st.drive;
+      cur = { throttle: Math.max(0, THROTTLE.findIndex(([w]) => w === d.throttle)), brake: d.brake ? 1 : 0 };
+      put(out, d.on ? `on · ${d.speed_kmh} km/h` : 'off');
+      onOff.forEach((b, i) => b.classList.toggle('active', i === (d.on ? 1 : 0)));
+      put(pout, `스로틀 ${cur.throttle} · 브레이크 ${cur.brake}`);
+      tbtn.forEach((b, i) => b.classList.toggle('active', d.on && i === cur.throttle));
+      brake.classList.toggle('active', d.on && d.brake);
+      g.classList.toggle('off', !d.on);
+      put(note, d.on ? 'ign·gear는 정지 상태에서만 바뀜 (R1, R2). speed는 페달이 정함' : 'drive on이면 페달로 운전 (speed 직접 입력 대신)');
+    });
+  }
+
   function build(st) {
     el.textContent = '';
     syncs = [];
@@ -142,11 +183,12 @@ export function createPanel(el, exec) {
       else if (name === DOORS.find((n) => sigs.has(n))) doorGroup(DOORS.filter((n) => sigs.has(n)));
     }
     if (VEHICLE.every((n) => sigs.has(n))) vehicleGroup();
+    if (st.drive) driveGroup();
     if (st.state) stateGroup(st.state);
   }
 
   function render(st) {
-    const k = `${st.console}|${st.signals.join(',')}|${st.state ? st.state.cmd : ''}`;
+    const k = `${st.console}|${st.signals.join(',')}|${st.state ? st.state.cmd : ''}|${st.drive ? 'drive' : ''}`;
     if (k !== key) {
       key = k;
       build(st);

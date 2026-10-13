@@ -16,6 +16,7 @@ const RATES = [0.25, 0.5, 1, 2, 5, 10];
 const MANUAL = ''; // 시나리오 select의 (수동)
 const MAX_FRAME_MS = 100; // 탭이 멈췄다 돌아와도 시간을 한꺼번에 몰아치지 않게 (sim/js/main.js와 같음)
 const FLOW_TAIL_MS = 3 * FLOW_STAGE_MS; // 시나리오가 끝난 뒤에도 흐름 표시를 유지하는 시간 (입력 → SWC → ECU 세 단계가 끝나도록)
+const FLOW_TAIL_DRIVE_MS = 7 * FLOW_STAGE_MS; // drive on이면 운전 조작 → 통합 ECU → drive.c → ego → 입력 단계가 더 있다 (R1~R5)
 
 const $ = (id) => document.getElementById(id);
 
@@ -246,7 +247,7 @@ function draw() {
   if (sim.tc && !runner.active) {
     sim.tc = false;
     setPlaying(false);
-    if (playing) sim.flowTail = now + FLOW_TAIL_MS; // 진행 중인 흐름(SWC·ECU 단계)이 끝까지 가도록
+    if (playing) sim.flowTail = now + (engine.state().drive?.on ? FLOW_TAIL_DRIVE_MS : FLOW_TAIL_MS); // 진행 중인 흐름(SWC·ECU 단계)이 끝까지 가도록
   }
   const st = engine.state();
   renderBar(st);
