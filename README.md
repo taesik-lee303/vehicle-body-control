@@ -175,6 +175,9 @@ make run         # 터미널에서 명령으로 조작 (help 로 명령 목록)
                                                          └─ dashboard.c  E 계기판 경고
   3D 장면·계기판·로그  ◄── 상태 JSON (sim_state) ────  sim_api.c   바뀐 출력은 로그로
 ```
+
+<img width="2058" height="1218" alt="image" src="https://github.com/user-attachments/assets/d7bcaac6-6d14-44e1-aebd-50af5ca2521a" />
+
 - 각 모듈은 공통 인터페이스 `VbcContext`만 보고 판단합니다. 입력·출력 방식을 바꿔도 코어 로직은 건드리지 않습니다.
 - 화면 코드(`sim/js`)에는 요구사항 판단(1000 lux, 15 km/h 등)이 없습니다.
 - 같은 C 코드를 `make test`·`make run`(gcc)과 브라우저(emcc)가 함께 씁니다.
