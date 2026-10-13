@@ -1,0 +1,547 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>VBC 레이더 흐름도</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;600&family=IBM+Plex+Sans+KR:wght@400;600;700&display=swap">
+<style>
+/* 레이아웃: 위 = 전체 그림(시뮬레이터 | 프레임 경계 | 제품), 아래 = 주기 순서, 자료 변환, 맵 내부, 상태 기계, 표. "VBC 코드 구조도"와 같은 체계 */
+:root {
+  --bg: #f4f6f7;
+  --fg: #1c2328;
+  --muted: #5b676f;
+  --line: #c9d1d6;
+  --mine: #ffffff;
+  --mine-edge: #2d5b7a;
+  --sim: #eef1f3;
+  --sim-edge: #7a8790;
+  --edge: #b45f1d;
+  --edge-fill: #fbeee3;
+  --frame: #e3e8eb;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #111619; --fg: #e1e7ea; --muted: #95a2a9; --line: #34414a;
+    --mine: #1a2227; --mine-edge: #7fb1d1; --sim: #161c20; --sim-edge: #6f7d86;
+    --edge: #e48c47; --edge-fill: #2a1d13; --frame: #1f272c; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #111619; --fg: #e1e7ea; --muted: #95a2a9; --line: #34414a;
+  --mine: #1a2227; --mine-edge: #7fb1d1; --sim: #161c20; --sim-edge: #6f7d86;
+  --edge: #e48c47; --edge-fill: #2a1d13; --frame: #1f272c; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--font-body); font-size: 15px; line-height: 1.6; }
+.wrap { max-width: 1140px; margin: 0 auto; padding-inline: 20px; padding-block: 32px 56px; display: grid; gap: 36px; }
+h1 { font-size: 28px; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+h2 { font-size: 19px; margin: 0 0 12px; text-wrap: balance; }
+p { margin: 0; max-width: 68ch; }
+.lede { display: grid; gap: 10px; }
+.muted { color: var(--muted); }
+.intro { margin-bottom: 12px; }
+code, .mono { font-family: var(--font-mono); font-size: 0.92em; }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 22px; font-size: 13px; color: var(--muted); }
+.legend span { display: inline-flex; align-items: center; gap: 8px; }
+.sw { width: 22px; height: 14px; border-radius: 3px; display: inline-block; }
+.sw.mine { background: var(--mine); border: 1.5px solid var(--mine-edge); }
+.sw.sim { background: var(--sim); border: 1.5px dashed var(--sim-edge); }
+.sw.edge { background: var(--edge-fill); border: 1.5px solid var(--edge); }
+.sw.req { width: 22px; height: 0; border-top: 2px dashed var(--edge); border-radius: 0; }
+.diagram { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); }
+.diagram svg { display: block; width: 100%; height: auto; }
+.diagram.main svg { min-width: 1060px; }
+.diagram.state svg { min-width: 980px; }
+.diagram.hw svg { min-width: 1000px; }
+svg text { font-family: var(--font-body); fill: var(--fg); }
+svg .fn { font-family: var(--font-mono); font-size: 14px; font-weight: 600; }
+svg .fn-s { font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+svg .sub { font-size: 12px; fill: var(--muted); }
+svg .lbl { font-family: var(--font-mono); font-size: 11.5px; fill: var(--muted); }
+svg .gt { font-size: 13px; font-weight: 700; fill: var(--muted); letter-spacing: 0.02em; }
+svg .st { font-size: 14px; font-weight: 700; }
+svg .box-mine { fill: var(--mine); stroke: var(--mine-edge); stroke-width: 1.6; }
+svg .box-hw { fill: var(--mine); stroke: var(--muted); stroke-width: 1.4; }
+svg .box-sim { fill: var(--sim); stroke: var(--sim-edge); stroke-width: 1.4; stroke-dasharray: 5 4; }
+svg .box-sim-in { fill: var(--mine); stroke: var(--sim-edge); stroke-width: 1.2; }
+svg .box-edge { fill: var(--edge-fill); stroke: var(--edge); stroke-width: 1.8; }
+svg .grp { fill: var(--frame); stroke: var(--line); stroke-width: 1; }
+svg .arr { fill: none; stroke: var(--mine-edge); stroke-width: 1.5; }
+svg .arr-hw { fill: none; stroke: var(--muted); stroke-width: 1.4; }
+svg .arr-req { fill: none; stroke: var(--edge); stroke-width: 1.5; stroke-dasharray: 5 4; }
+svg .arr-back { fill: none; stroke: var(--sim-edge); stroke-width: 1.3; stroke-dasharray: 3 4; }
+svg .head { fill: var(--mine-edge); }
+svg .head-edge { fill: var(--edge); }
+svg .head-back { fill: var(--sim-edge); }
+svg .head-hw { fill: var(--muted); }
+svg .edge-t { fill: var(--edge); }
+ol.seq { margin: 0; padding-left: 22px; display: grid; gap: 6px; max-width: 84ch; }
+ol.seq li::marker { font-family: var(--font-mono); color: var(--muted); }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: 8px; }
+table { border-collapse: collapse; width: 100%; min-width: 760px; font-size: 13.5px; }
+th, td { text-align: left; vertical-align: top; padding: 9px 12px; border-bottom: 1px solid var(--line); }
+th { font-size: 12px; color: var(--muted); letter-spacing: 0.04em; font-weight: 600; background: var(--frame); }
+tr:last-child td { border-bottom: 0; }
+td.num { font-variant-numeric: tabular-nums; font-family: var(--font-mono); white-space: nowrap; }
+td.f { font-family: var(--font-mono); white-space: nowrap; font-weight: 600; }
+tr.group td { background: var(--frame); font-weight: 700; font-size: 12.5px; color: var(--muted); }
+tr.sim td.f { color: var(--muted); }
+tr.edge td.f { color: var(--edge); }
+.two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 28px; }
+.two > section { min-width: 0; }
+@media (max-width: 860px) { .two { grid-template-columns: minmax(0, 1fr); } }
+.notes { display: grid; gap: 8px; max-width: 84ch; }
+.notes p { max-width: none; }
+/* 실제 레이더 vs env_radar 비교 카드: 테두리가 범례와 같은 뜻 (주황 = 경계에서 같음, 실선 = 하드웨어, 점선 = 시뮬레이터) */
+.cmp { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 16px; }
+@media (max-width: 860px) { .cmp { grid-template-columns: minmax(0, 1fr); } }
+.card { min-width: 0; border-radius: 8px; padding: 14px 16px 16px; display: grid; gap: 8px; align-content: start; }
+.card.common { background: var(--edge-fill); border: 1.5px solid var(--edge); }
+.card.hw { background: var(--mine); border: 1.5px solid var(--muted); }
+.card.sm { background: var(--sim); border: 1.5px dashed var(--sim-edge); }
+.card h3 { font-size: 15.5px; margin: 0; }
+.card.common h3 { color: var(--edge); }
+.card .tag { font-size: 12.5px; color: var(--muted); }
+.card ul { margin: 0; padding-left: 18px; display: grid; gap: 5px; font-size: 14px; }
+.verdict { margin-top: 16px; padding: 12px 16px; border-left: 3px solid var(--edge); background: var(--frame); border-radius: 0 6px 6px 0; max-width: none; }
+</style>
+
+<div class="wrap">
+  <header class="lede">
+    <h1>VBC 레이더 흐름도</h1>
+    <p>전방 레이더 맵 · Stop &amp; Go 실험 기능이 50 ms마다 어떻게 돌아가는지 정리했습니다. <code>main</code> 브랜치 <code>src/</code> 기준입니다. 핵심은 가운데 주황 상자입니다. 제품 코드(오른쪽)는 가상 세계를 직접 보지 않고, 실제 차처럼 레이더가 보낸 프레임만 받습니다.</p>
+    <div class="legend">
+      <span><i class="sw mine"></i>제품 코드 (실차라면 그대로 씀)</span>
+      <span><i class="sw sim"></i>시뮬레이터 전용 (실차라면 실제 레이더·도로)</span>
+      <span><i class="sw edge"></i>하드웨어/소프트웨어 경계</span>
+      <span><i class="sw req"></i>요청 (직접 바꾸지 않음)</span>
+      <span>줄 수 = <code>.c</code> 기준</span>
+    </div>
+  </header>
+
+  <section>
+    <div class="diagram main" role="img" aria-label="레이더 모듈 파일 구조와 호출 관계 그림">
+      <svg viewBox="0 0 1100 600" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ahe" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-edge" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ahb" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-back" d="M0,0 L10,5 L0,10 z"/></marker>
+          <marker id="ahh" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path class="head-hw" d="M0,0 L10,5 L0,10 z"/></marker>
+        </defs>
+
+        <!-- 맨 위: 진입점과 콘솔 -->
+        <rect class="box-mine" x="40" y="22" width="230" height="64" rx="6"/>
+        <text class="fn" x="58" y="49">sim/js/*  (브라우저)</text>
+        <text class="sub" x="58" y="70">교통 장면 버튼 · 전방 맵 패널</text>
+
+        <rect class="box-mine" x="300" y="22" width="230" height="64" rx="6"/>
+        <text class="fn" x="318" y="49">sim_api.c · 214</text>
+        <text class="sub" x="318" y="70">sim_adas · sim_points (JSON)</text>
+
+        <rect class="box-mine" x="600" y="22" width="460" height="64" rx="6"/>
+        <text class="fn" x="620" y="49">console.c · 1044</text>
+        <text class="sub" x="620" y="70">50 ms마다 adas_tick() → adas_control() · obj / radar / sg 명령</text>
+
+        <path class="arr" d="M270,54 L298,54" marker-end="url(#ah)"/>
+        <path class="arr" d="M530,54 L598,54" marker-end="url(#ah)"/>
+        <text class="lbl" x="536" y="46">sim_exec</text>
+
+        <!-- 세 구역 -->
+        <rect class="grp" x="20" y="134" width="440" height="420" rx="8"/>
+        <text class="gt" x="36" y="156">시뮬레이터 · 가상 세계와 가상 레이더</text>
+        <rect class="grp" x="630" y="134" width="450" height="420" rx="8"/>
+        <text class="gt" x="646" y="156">제품 소프트웨어 · 프레임과 VbcContext만 본다</text>
+
+        <!-- 브라우저/콘솔 → 세계 -->
+        <path class="arr" d="M330,86 L330,168" marker-end="url(#ah)"/>
+        <text class="lbl" x="232" y="124">sim_set_path</text>
+        <text class="lbl" x="232" y="140">sim_set_ego</text>
+        <path class="arr" d="M660,86 L660,110 L400,110 L400,168" marker-end="url(#ah)"/>
+        <text class="lbl" x="410" y="128">world_step</text>
+
+        <!-- 세계 -->
+        <rect class="box-sim" x="40" y="170" width="400" height="86" rx="6"/>
+        <text class="fn" x="56" y="196">env_world.c · 377</text>
+        <text class="sub" x="56" y="217">차·트럭·보행자·육교·맨홀 최대 32개, 경로와 차로, 자차 자세</text>
+        <text class="sub" x="56" y="236">물체끼리는 서로 피하지 않음 (정해진 속도·가로 이동만)</text>
+
+        <path class="arr" d="M150,256 L150,296" marker-end="url(#ah)"/>
+        <text class="lbl" x="158" y="282">world_obox · 자차 기준 상자</text>
+
+        <!-- 센서 모델 -->
+        <rect class="box-sim" x="40" y="298" width="400" height="236" rx="6"/>
+        <text class="fn" x="56" y="324">env_radar.c · 414</text>
+        <text class="sub" x="56" y="345">센서 모델 = 가상 레이더 3대 (같은 장면이면 같은 프레임)</text>
+
+        <rect class="box-sim-in" x="56" y="360" width="118" height="110" rx="5"/>
+        <text class="fn-s" x="68" y="382">FR</text>
+        <text class="sub" x="68" y="402">4D 이미징</text>
+        <text class="sub" x="68" y="420">±60° · 200 m</text>
+        <text class="sub" x="68" y="438">고도각 있음</text>
+        <text class="sub" x="68" y="456">최대 512점</text>
+        <rect class="box-sim-in" x="186" y="360" width="118" height="110" rx="5"/>
+        <text class="fn-s" x="198" y="382">FCL</text>
+        <text class="sub" x="198" y="402">왼쪽 앞 측면</text>
+        <text class="sub" x="198" y="420">+45° · ±75°</text>
+        <text class="sub" x="198" y="438">80 m</text>
+        <text class="sub" x="198" y="456">최대 128점</text>
+        <rect class="box-sim-in" x="316" y="360" width="108" height="110" rx="5"/>
+        <text class="fn-s" x="328" y="382">FCR</text>
+        <text class="sub" x="328" y="402">오른쪽 앞 측면</text>
+        <text class="sub" x="328" y="420">−45° · ±75°</text>
+        <text class="sub" x="328" y="438">80 m</text>
+        <text class="sub" x="328" y="456">최대 128점</text>
+        <text class="sub" x="56" y="494">보이는 면에 점 → 시야 → 가림 → 검출 확률 → 잡음 → 분해능</text>
+        <text class="sub" x="56" y="514">고장 주입: 끊김 · 프레임 반복 · 값 고착 · 가림 (XH8)</text>
+
+        <!-- 경계 -->
+        <rect class="box-edge" x="480" y="170" width="130" height="364" rx="6"/>
+        <text class="fn edge-t" x="494" y="198">radar_frame.h</text>
+        <text class="sub" x="494" y="224">RadarFrame</text>
+        <text class="sub" x="494" y="244">레이더마다 50 ms</text>
+        <text class="sub" x="494" y="276">머리</text>
+        <text class="sub" x="494" y="294">카운터 · 상태</text>
+        <text class="sub" x="494" y="326">검출점마다</text>
+        <text class="sub" x="494" y="344">거리 · 방위각</text>
+        <text class="sub" x="494" y="362">고도각 · 도플러</text>
+        <text class="sub" x="494" y="380">신호 세기</text>
+        <text class="sub" x="494" y="412">장착 정보</text>
+        <text class="sub" x="494" y="430">RADAR_MOUNTS</text>
+        <text class="sub" x="494" y="448">(양쪽이 공유)</text>
+        <text class="sub" x="494" y="490">실차: CAN-FD /</text>
+        <text class="sub" x="494" y="508">이더넷 메시지</text>
+
+        <path class="arr" d="M440,416 L478,416" marker-end="url(#ahe)"/>
+        <text class="lbl edge-t" x="380" y="548">radar_sim_frame</text>
+        <path class="arr" d="M610,232 L648,232" marker-end="url(#ah)"/>
+        <text class="lbl" x="614" y="222">map_rx_frame</text>
+
+        <!-- 제품 -->
+        <rect class="box-mine" x="650" y="170" width="210" height="128" rx="6"/>
+        <text class="fn" x="666" y="196">adas_map.c · 579</text>
+        <text class="sub" x="666" y="218">XC 프레임 유효성</text>
+        <text class="sub" x="666" y="236">XM 군집 · 추적 · 융합</text>
+        <text class="sub" x="666" y="254">높이 거르기 · 예측 경로</text>
+        <text class="sub" x="666" y="272">선행 차량 선택</text>
+        <text class="sub" x="666" y="290">map_step</text>
+
+        <rect class="box-mine" x="880" y="170" width="180" height="92" rx="6"/>
+        <text class="fn" x="896" y="196">common.c</text>
+        <text class="sub" x="896" y="218">VbcContext</text>
+        <text class="sub" x="896" y="236">유효한 속도 (C3)</text>
+        <text class="sub" x="896" y="254">수신 중단 (C4)</text>
+        <path class="arr" d="M880,214 L862,214" marker-end="url(#ah)"/>
+        <path class="arr" d="M970,262 L970,364 L862,364" marker-end="url(#ah)"/>
+
+        <path class="arr" d="M755,298 L755,326" marker-end="url(#ah)"/>
+        <text class="lbl" x="763" y="317">map_lead · map_restart_block</text>
+
+        <rect class="box-mine" x="650" y="328" width="210" height="80" rx="6"/>
+        <text class="fn" x="666" y="354">adas_stopgo.c · 359</text>
+        <text class="sub" x="666" y="376">상태 5개 · XS1~XS13</text>
+        <text class="sub" x="666" y="394">출력: 가속도 · 정지 유지 · 알림</text>
+
+        <path class="arr-req" d="M755,408 L755,436" marker-end="url(#ahe)"/>
+        <text class="lbl edge-t" x="763" y="427">drive_set_request (요청)</text>
+
+        <rect class="box-mine" x="650" y="438" width="210" height="96" rx="6"/>
+        <text class="fn" x="666" y="464">drive.c · 103</text>
+        <text class="sub" x="666" y="486">요청 → 실제 속도 (XR1·XR2)</text>
+        <text class="sub" x="666" y="504">브레이크 &gt; 가속 페달</text>
+        <text class="sub" x="666" y="522">&gt; 정지 유지 &gt; 가속도 &gt; 타력</text>
+
+        <!-- 속도가 다시 돌아감 -->
+        <path class="arr-back" d="M860,486 L1072,486 L1072,98 L1040,98 L1040,88" marker-end="url(#ahb)"/>
+        <text class="lbl" x="880" y="508">다음 주기 속도 → vbc_rx_speed · world_step</text>
+
+        <text class="sub" x="40" y="580">왼쪽 두 파일은 시뮬레이터 전용입니다. 제품 코드의 #include에는 env_*가 없습니다.</text>
+      </svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>실제 레이더와 env_radar</h2>
+    <p class="muted intro">앞에 차가 한 대 있을 때, 두 레이더가 각자 다른 길로 같은 프레임에 도착합니다. 끝이 같은 <code>RadarFrame</code>이라 <code>adas_map.c</code>는 둘을 구별하지 못합니다. 실차로 옮길 때 왼쪽 두 파일만 빠지는 이유입니다.</p>
+    <div class="diagram hw" role="img" aria-label="실제 레이더 하드웨어와 시뮬레이터 센서 모델이 같은 프레임 형식으로 모이는 그림">
+      <svg viewBox="0 0 1100 300" xmlns="http://www.w3.org/2000/svg">
+        <!-- 위: 실제 하드웨어 -->
+        <text class="gt" x="30" y="30">실제 레이더 (하드웨어) · 물리로 측정</text>
+        <rect class="box-hw" x="30" y="42" width="145" height="78" rx="6"/>
+        <text class="st" x="44" y="68">전파 송신</text>
+        <text class="sub" x="44" y="90">77 GHz FMCW</text>
+        <text class="sub" x="44" y="108">처프 반복</text>
+        <rect class="box-hw" x="195" y="42" width="145" height="78" rx="6"/>
+        <text class="st" x="209" y="68">반사</text>
+        <text class="sub" x="209" y="90">강한 점 몇 곳</text>
+        <text class="sub" x="209" y="108">멀티패스 · 유령 점</text>
+        <rect class="box-hw" x="360" y="42" width="145" height="78" rx="6"/>
+        <text class="st" x="374" y="68">수신 · FFT</text>
+        <text class="sub" x="374" y="90">거리 · 도플러 칸</text>
+        <text class="sub" x="374" y="108">간섭이면 잡음 상승</text>
+        <rect class="box-hw" x="525" y="42" width="145" height="78" rx="6"/>
+        <text class="st" x="539" y="68">CFAR 검출</text>
+        <text class="sub" x="539" y="90">주변 잡음 대비</text>
+        <text class="sub" x="539" y="108">점 단위 문턱</text>
+        <rect class="box-hw" x="690" y="42" width="145" height="78" rx="6"/>
+        <text class="st" x="704" y="68">각도 추정</text>
+        <text class="sub" x="704" y="90">안테나 위상차</text>
+        <text class="sub" x="704" y="108">가까우면 뭉개짐</text>
+        <path class="arr-hw" d="M175,81 L193,81" marker-end="url(#ahh)"/>
+        <path class="arr-hw" d="M340,81 L358,81" marker-end="url(#ahh)"/>
+        <path class="arr-hw" d="M505,81 L523,81" marker-end="url(#ahh)"/>
+        <path class="arr-hw" d="M670,81 L688,81" marker-end="url(#ahh)"/>
+        <path class="arr-hw" d="M835,81 L873,81" marker-end="url(#ahh)"/>
+
+        <!-- 아래: 시뮬레이터 -->
+        <text class="gt" x="30" y="168">env_radar.c (시뮬레이터) · 정답을 일부러 흐림</text>
+        <rect class="box-sim" x="30" y="180" width="145" height="78" rx="6"/>
+        <text class="st" x="44" y="206">세계 정답</text>
+        <text class="lbl" x="44" y="228">world_obox</text>
+        <text class="sub" x="44" y="246">상자 · 속도 그대로</text>
+        <rect class="box-sim" x="195" y="180" width="145" height="78" rx="6"/>
+        <text class="st" x="209" y="206">보이는 면</text>
+        <text class="sub" x="209" y="228">격자 산란점</text>
+        <text class="sub" x="209" y="246">물체당 최대 64</text>
+        <rect class="box-sim" x="360" y="180" width="145" height="78" rx="6"/>
+        <text class="st" x="374" y="206">검출 확률</text>
+        <text class="lbl" x="374" y="228">pd_of(margin)</text>
+        <text class="sub" x="374" y="246">물체 단위 · 점 70%</text>
+        <rect class="box-sim" x="525" y="180" width="145" height="78" rx="6"/>
+        <text class="st" x="539" y="206">가림 · 시야</text>
+        <text class="lbl" x="539" y="228">occluded</text>
+        <text class="lbl" x="539" y="246">in_fov</text>
+        <rect class="box-sim" x="690" y="180" width="145" height="78" rx="6"/>
+        <text class="st" x="704" y="206">잡음 · 분해능</text>
+        <text class="sub" x="704" y="228">가우스 잡음</text>
+        <text class="sub" x="704" y="246">같은 칸 병합</text>
+        <path class="arr-back" d="M175,219 L193,219" marker-end="url(#ahb)"/>
+        <path class="arr-back" d="M340,219 L358,219" marker-end="url(#ahb)"/>
+        <path class="arr-back" d="M505,219 L523,219" marker-end="url(#ahb)"/>
+        <path class="arr-back" d="M670,219 L688,219" marker-end="url(#ahb)"/>
+        <path class="arr-back" d="M835,219 L873,219" marker-end="url(#ahb)"/>
+
+        <!-- 같은 출구 -->
+        <rect class="box-edge" x="875" y="42" width="195" height="216" rx="6"/>
+        <text class="fn edge-t" x="891" y="70">RadarFrame</text>
+        <text class="sub" x="891" y="94">같은 형식으로 도착</text>
+        <text class="sub" x="891" y="124">카운터 · 상태</text>
+        <text class="sub" x="891" y="144">거리 · 방위각</text>
+        <text class="sub" x="891" y="164">고도각 · 도플러</text>
+        <text class="sub" x="891" y="184">신호 세기</text>
+        <text class="sub" x="891" y="214">물체 번호·종류 없음</text>
+        <text class="lbl edge-t" x="891" y="242">→ map_rx_frame</text>
+
+        <text class="sub" x="30" y="288">위는 실제 차에서 일어나는 일, 아래는 그것을 흉내 낸 코드입니다. 단계 이름은 짝이 맞지만 하는 일은 다릅니다.</text>
+      </svg>
+    </div>
+
+    <div class="cmp">
+      <div class="card common">
+        <h3>공통점</h3>
+        <span class="tag">경계에서 보면 똑같음</span>
+        <ul>
+          <li>출력 항목: 거리, 방위각, 고도각, 도플러, 신호 세기</li>
+          <li>장착 위치, 시야, 분해능을 같은 <code>RADAR_MOUNTS</code>로 씀</li>
+          <li>센서 쪽을 향한 면만 반사하고 뒤는 안 보임</li>
+          <li>멀어질수록 약해짐 (거리의 4제곱)</li>
+          <li>거리·각도·속도가 같은 칸이면 한 점으로 합쳐짐</li>
+          <li>50 ms 주기, 카운터, 상태, 끊김·고착 같은 고장 종류</li>
+        </ul>
+      </div>
+      <div class="card hw">
+        <h3>실제에만 있는 것</h3>
+        <span class="tag">현실은 더 지저분함</span>
+        <ul>
+          <li>반사가 범퍼, 번호판, 바퀴 몇 곳에 몰림</li>
+          <li>보는 각도에 따라 반사 세기가 크게 요동침</li>
+          <li>바퀴가 돌아서 같은 차 안에서도 도플러가 다름</li>
+          <li>차체 아래로 튄 반사로 가려진 차가 보이기도 함</li>
+          <li>다중 반사로 없는 곳에 유령 점이 생김</li>
+          <li>다른 차 레이더 간섭, 비·눈·오염으로 서서히 약해짐</li>
+        </ul>
+      </div>
+      <div class="card sm">
+        <h3>env_radar가 단순하게 둔 것</h3>
+        <span class="tag">깨끗한 레이더</span>
+        <ul>
+          <li>면에 고르게 찍힌 격자 점</li>
+          <li>종류별로 고정된 반사 세기 (차 10 dBsm)</li>
+          <li>상자 하나에 속도 하나</li>
+          <li>가리면 완전히 가림</li>
+          <li>클러터는 노면 0~3점과 직선 도로 가드레일뿐</li>
+          <li>시드가 고정이라 같은 장면이면 늘 같은 프레임</li>
+        </ul>
+      </div>
+    </div>
+    <p class="verdict">한 줄로: <strong>env_radar는 잘 닦인 실제 레이더입니다.</strong> 군집화, 추적, 융합, Stop &amp; Go 상태 기계의 흐름이 맞는지 보기에는 충분합니다. 유령 점, 멀티패스, 각도별 반사처럼 현실의 지저분함을 견디는지는 이 시뮬레이터로 검증되지 않으므로 실차 데이터로 따로 확인해야 합니다.</p>
+  </section>
+
+  <section>
+    <h2>50 ms 한 주기에 일어나는 순서</h2>
+    <p class="muted intro"><code>console.c</code>의 <code>console_advance()</code>가 50 ms마다 아래를 반복합니다. <code>adas on</code>일 때만 4~5번이 돕니다.</p>
+    <ol class="seq">
+      <li><code>drive_step()</code> 지난 주기에 받은 Stop &amp; Go 요청대로 속도를 바꿉니다.</li>
+      <li><code>send_signals()</code> · <code>vbc_step()</code> 속도·기어·시동을 다시 보내고 <code>VbcContext</code>를 만듭니다(C3 유효한 속도, C4 수신 중단).</li>
+      <li><code>world_step()</code> 가상 세계의 물체가 움직이고, 자차도 경로를 따라 갑니다(지도 화면이면 <code>sim_set_ego</code>로 받은 자세).</li>
+      <li><code>radar_sim_frame()</code> × 3 → <code>map_rx_frame()</code> 레이더마다 프레임을 만들어 맵에 넣고, <code>map_set_yaw_rate()</code>로 요레이트를 준 뒤 <code>map_step()</code>으로 맵을 갱신합니다.</li>
+      <li><code>sg_step()</code> → <code>drive_set_request()</code> Stop &amp; Go가 목표 가속도와 정지 유지를 정해 주행 모델에 요청합니다. 실제로 속도가 바뀌는 것은 다음 주기의 1번입니다.</li>
+      <li><code>report_changes()</code> 선행 차량, 레이더 상태, Stop &amp; Go 상태가 바뀌면 로그에 찍습니다. 예: <code>[ 13.600s] Stop &amp; Go: 작동 → 정지 유지</code></li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>자료 형태가 바뀌는 순서</h2>
+    <p class="muted intro">가상 물체 하나가 가속도 요청이 되기까지 거치는 구조체입니다. 주황 줄이 경계입니다.</p>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>구조체</th><th>어디서</th><th>담고 있는 것</th><th>다음으로 바꾸는 함수</th></tr></thead>
+        <tbody>
+          <tr class="sim"><td class="f">WorldObj</td><td><code>env_world.h</code></td><td>경로 위치 s, 가로 위치 y, 속도, 목표 속도, 가로 이동 조건</td><td><code>world_obox()</code></td></tr>
+          <tr class="sim"><td class="f">OBox</td><td><code>env_world.h</code></td><td>자차 앞 범퍼 기준 회전 상자(가운데, 크기, 방향, 지면 속도)</td><td><code>generate()</code> → <code>gen_object()</code> → <code>emit()</code></td></tr>
+          <tr class="edge"><td class="f">RadarFrame / RadarDetection</td><td><code>radar_frame.h</code></td><td>카운터, 상태, 검출점(거리, 방위각, 고도각, 도플러, 신호 세기)</td><td><code>map_rx_frame()</code></td></tr>
+          <tr><td class="f">MapPoint</td><td><code>adas_map.h</code></td><td>차량 좌표 x·y·z, 지면 속도, 정지 점 여부, 노면 점 여부 (XM2)</td><td><code>cluster_sensor()</code></td></tr>
+          <tr><td class="f">Cluster</td><td><code>adas_map.c</code></td><td>가까운 점 묶음: x 1.5 m, y 1 m, 속도 1 m/s, 높이 1 m 안 (XM3)</td><td><code>track_all()</code></td></tr>
+          <tr><td class="f">Track</td><td><code>adas_map.h</code></td><td>가까운 면 x, 가로 범위, 상대속도, 높이, 확정·정지·장애물·경로 내 (XM4~XM8)</td><td><code>classify()</code> · <code>select_lead()</code></td></tr>
+          <tr><td class="f">lead_id</td><td><code>AdasMap</code></td><td>경로 안에서 가장 가까운 확정 트랙 (XM9)</td><td><code>sg_step()</code> → <code>control()</code></td></tr>
+          <tr><td class="f">accel · hold · alert</td><td><code>StopGo</code></td><td>목표 가속도 −3.5~+1.5 m/s², 정지 유지 요청, 계기판 알림</td><td><code>drive_set_request()</code></td></tr>
+          <tr><td class="f">speed_mkmh</td><td><code>Drive</code></td><td>1/1000 km/h 정수 속도. 다시 <code>vbc_rx_speed()</code>로 들어감</td><td><code>drive_step()</code></td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>map_step() 안쪽</h2>
+      <p class="muted intro">프레임을 받을 때 <code>map_rx_frame()</code>이 먼저 거릅니다. 카운터가 같으면 새 프레임이 아니고(XC1), 자차가 움직이는데 점 목록이 1초간 같으면 고착입니다(XC7).</p>
+      <ol class="seq">
+        <li><code>update_health()</code> 레이더별 정상·고장·확인 중. 새 프레임 0.2초 없음, 상태 비정상, 고착이면 고장. 1초 정상이면 복귀 (XC1·XC2·XC7·XC8)</li>
+        <li><code>track_all()</code> 군집을 기존 트랙에 잇고 α-β 필터로 위치·속도 갱신. 3번 이어지면 확정, 0.3초 놓쳐도 유지, 레이더 3대 융합 (XM3~XM5)</li>
+        <li><code>classify()</code> 바닥 2.5 m 이상(육교)·0.2 m 미만(맨홀)인 정지 물체는 무시. 곡률 = 요레이트 ÷ 속도로 예측 경로를 그려 ±1.3 m 안이면 경로 내 (XM6~XM8)</li>
+        <li>맵 상태: FR 고장이면 없음, 측면 고장이면 축소, 아니면 정상 (XM10)</li>
+        <li><code>select_lead()</code> 경로 내 가장 가까운 트랙. 더 가까운 차가 들어오면 0.3초 연속일 때 교체, 1.8 m 넘게 0.5초 벗어나면 해제 (XM9)</li>
+      </ol>
+    </section>
+    <section>
+      <h2>sg_step() 안쪽</h2>
+      <p class="muted intro">매 주기 공통 조건을 먼저 계산하고 상태별로 처리합니다. 우선순위는 XS10 &gt; XS11 &gt; XS8 &gt; XS9 &gt; XS12 &gt; XS5·6·7 &gt; XS4 &gt; XS3입니다.</p>
+      <ol class="seq">
+        <li><code>sys_release</code> 해제 조건: 시동 OFF, 기어 D 아님, C4 수신 중단, 70 km/h 초과, 맵 없음, 문 열림 (XS11)</li>
+        <li><code>engage_ok</code> 켜기 조건: 기어 D, 60 km/h 이하, 브레이크 안 밟음, 문 닫힘, FR 정상 (XS1)</li>
+        <li><code>map_restart_block()</code> 재출발 금지: 앞 5 m 안 장애물, 측면에서 다가오는 물체, 맵 없음 (XS9)</li>
+        <li>상태 처리. 작동 중이면 <code>control()</code>이 목표 거리 4 m + 차간 시간 × 속도로 가속도를 정하고, 변화율을 2.5 m/s³로 제한합니다 (XS3·XS4·XS5)</li>
+        <li>TTC 1.5초 미만이거나 감속이 3.5 m/s²를 넘게 필요하면 −3.5 m/s²와 운전자 개입 요청 (XS12)</li>
+      </ol>
+    </section>
+  </div>
+
+  <section>
+    <h2>Stop &amp; Go 상태 기계</h2>
+    <div class="diagram state" role="img" aria-label="Stop and Go 상태 전이 그림">
+      <svg viewBox="0 0 1040 270" xmlns="http://www.w3.org/2000/svg">
+        <rect class="box-mine" x="20" y="96" width="140" height="56" rx="6"/>
+        <text class="st" x="68" y="122">꺼짐</text>
+        <text class="lbl" x="66" y="140">SG_OFF</text>
+        <rect class="box-mine" x="230" y="96" width="140" height="56" rx="6"/>
+        <text class="st" x="284" y="122">대기</text>
+        <text class="lbl" x="264" y="140">SG_STANDBY</text>
+        <rect class="box-mine" x="450" y="96" width="140" height="56" rx="6"/>
+        <text class="st" x="504" y="122">작동</text>
+        <text class="lbl" x="487" y="140">SG_ACTIVE</text>
+        <rect class="box-mine" x="670" y="96" width="140" height="56" rx="6"/>
+        <text class="st" x="708" y="122">정지 유지</text>
+        <text class="lbl" x="713" y="140">SG_HOLD</text>
+        <rect class="box-mine" x="880" y="96" width="140" height="56" rx="6"/>
+        <text class="st" x="908" y="122">재출발 대기</text>
+        <text class="lbl" x="926" y="140">SG_WAIT</text>
+
+        <path class="arr" d="M160,124 L228,124" marker-end="url(#ah)"/>
+        <text class="lbl" x="164" y="114">스위치 ON</text>
+        <path class="arr" d="M370,124 L448,124" marker-end="url(#ah)"/>
+        <text class="lbl" x="376" y="114">SET · RES</text>
+        <text class="lbl" x="376" y="146">XS1 · XS2</text>
+        <path class="arr" d="M590,124 L668,124" marker-end="url(#ah)"/>
+        <text class="lbl" x="594" y="146">앞차 정지</text>
+        <text class="lbl" x="594" y="162">속도 0 · XS5</text>
+        <path class="arr" d="M810,124 L878,124" marker-end="url(#ah)"/>
+        <text class="lbl" x="814" y="146">3초 · XS7</text>
+
+        <path class="arr" d="M740,96 C740,40 520,40 520,94" marker-end="url(#ah)"/>
+        <text class="lbl" x="548" y="44">3초 안에 앞차 출발 · XS6</text>
+        <path class="arr" d="M950,96 C950,10 540,10 536,94" marker-end="url(#ah)"/>
+        <text class="lbl" x="770" y="20">RES · 가속 페달 · XS7</text>
+
+        <path class="arr-back" d="M520,152 L520,214 L300,214 L300,154" marker-end="url(#ahb)"/>
+        <path class="arr-back" d="M740,152 L740,214 L520,214"/>
+        <path class="arr-back" d="M950,152 L950,214 L740,214"/>
+        <text class="lbl" x="330" y="236">브레이크 (XS10) · 해제 조건 (XS11) · 180초 정지 · 문 열림 · 기어 변경 (XS8) → 대기</text>
+        <text class="lbl" x="330" y="254">정지 중에 대기로 돌아가면 P 또는 브레이크까지 정지 유지 요청을 계속 냅니다</text>
+      </svg>
+    </div>
+  </section>
+
+  <section>
+    <h2>파일별 역할과 공개 함수</h2>
+    <div class="tbl">
+      <table>
+        <thead><tr><th>파일</th><th>줄 (.c / .h)</th><th>역할</th><th>공개 함수</th><th>요구사항</th></tr></thead>
+        <tbody>
+          <tr class="group"><td colspan="5">시뮬레이터 전용</td></tr>
+          <tr class="sim"><td class="f">env_world.c/h</td><td class="num">377 / 133</td><td>가상 세계: 물체, 경로, 차로, 자차 자세. 차로 이름(same·side·opp·curbl·curbr)을 그 자리의 가로 위치로 바꿈</td><td><code>world_init</code> <code>world_add</code> <code>world_step</code> <code>world_set_ego</code> <code>world_path_set</code> <code>world_obox</code> <code>world_lane_y</code> <code>world_trigger_lane</code> <code>world_truth_gap</code></td><td>8.3</td></tr>
+          <tr class="sim"><td class="f">env_radar.c/h</td><td class="num">414 / 43</td><td>레이더 센서 모델: 산란점, 시야, 가림, 검출 확률, 잡음, 분해능, 고장 주입. 시드 고정</td><td><code>radar_sim_init</code> <code>radar_sim_set_fault</code> <code>radar_sim_frame</code></td><td>XH1~XH8</td></tr>
+          <tr class="group"><td colspan="5">경계</td></tr>
+          <tr class="edge"><td class="f">radar_frame.c/h</td><td class="num">29 / 64</td><td>프레임 형식과 레이더 3대의 장착 위치·제원(<code>RADAR_MOUNTS</code>). 검출점 유효 범위</td><td><code>radar_detection_valid</code></td><td>2.2, XC3, 8.1</td></tr>
+          <tr class="group"><td colspan="5">제품 소프트웨어</td></tr>
+          <tr><td class="f">adas_map.c/h</td><td class="num">579 / 127</td><td>프레임 검증, 좌표 변환, 군집화, α-β 추적, 분류, 선행 차량, 재출발 금지 판정</td><td><code>map_init</code> <code>map_rx_frame</code> <code>map_step</code> <code>map_set_yaw_rate</code> <code>map_path_y</code> <code>map_lead</code> <code>map_track</code> <code>map_restart_block</code></td><td>XC1~XC8, XM1~XM10</td></tr>
+          <tr><td class="f">adas_stopgo.c/h</td><td class="num">359 / 91</td><td>상태 기계, 정속·추종·정지·재출발, 해제, 충돌 위험, 계기판 알림</td><td><code>sg_init</code> <code>sg_step</code> <code>sg_switch</code> <code>sg_press_set</code> <code>sg_press_res</code> <code>sg_set_gap</code> <code>sg_adjust</code></td><td>XS1~XS13, XD1~XD4</td></tr>
+          <tr><td class="f">drive.c/h</td><td class="num">103 / 71</td><td>주행 모델. 페달 다음 순서로 Stop &amp; Go 요청을 받아 속도를 바꿈</td><td><code>drive_set_request</code> <code>drive_step</code> <code>drive_speed_kmh</code></td><td>R1~R5, XR1·XR2</td></tr>
+          <tr class="group"><td colspan="5">연결</td></tr>
+          <tr><td class="f">console.c/h</td><td class="num">1044 / 85</td><td>50 ms 주기에서 위 모듈을 순서대로 호출. <code>obj</code> · <code>radar</code> · <code>sg</code> 명령과 <code>expect sg/lead/gap/leadx</code></td><td><code>console_exec</code> <code>console_advance</code> (내부: <code>adas_tick</code> <code>adas_control</code>)</td><td>-</td></tr>
+          <tr><td class="f">sim_api.c/h</td><td class="num">214 / 36</td><td>브라우저로 맵·트랙·물체·Stop &amp; Go 상태를 JSON, 검출점을 배열로 내보냄. 지도 경로와 자차 자세를 받음</td><td><code>sim_adas</code> <code>sim_points</code> <code>sim_points_count</code> <code>sim_set_path</code> <code>sim_set_ego</code></td><td>-</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <div class="two">
+    <section>
+      <h2>레이더 3대 장착 정보</h2>
+      <div class="tbl">
+        <table style="min-width:420px">
+          <thead><tr><th>레이더</th><th>위치 (x, y)</th><th>정면</th><th>시야</th><th>거리</th><th>점</th></tr></thead>
+          <tbody>
+            <tr><td class="f">FR</td><td class="num">0, 0</td><td class="num">0°</td><td class="num">±60° / ±15°</td><td class="num">0.5~200 m</td><td class="num">512</td></tr>
+            <tr><td class="f">FCL</td><td class="num">−0.2, +0.75</td><td class="num">+45°</td><td class="num">±75°</td><td class="num">0.2~80 m</td><td class="num">128</td></tr>
+            <tr><td class="f">FCR</td><td class="num">−0.2, −0.75</td><td class="num">−45°</td><td class="num">±75°</td><td class="num">0.2~80 m</td><td class="num">128</td></tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="muted" style="margin-top:10px">원점은 앞 범퍼 가운데 노면, x 앞, y 왼쪽입니다. 고도각은 FR만 있어서 육교·맨홀 거르기(XM6)는 FR이 본 높이로 합니다.</p>
+    </section>
+    <section>
+      <h2>브라우저와 이어지는 곳</h2>
+      <div class="tbl">
+        <table style="min-width:420px">
+          <thead><tr><th>화면</th><th>C 쪽</th></tr></thead>
+          <tbody>
+            <tr><td>툴박스 교통 장면</td><td><code>obj add</code> · <code>obj lane</code> 명령</td></tr>
+            <tr><td>지도 모드 시작</td><td><code>sim_set_path</code> (경로·차로 한 번)</td></tr>
+            <tr><td>매 프레임 자차 위치</td><td><code>sim_set_ego</code> (위치·방향·요레이트)</td></tr>
+            <tr><td>오른쪽 전방 맵 패널</td><td><code>sim_points</code>, <code>sim_adas</code>의 tracks·lead</td></tr>
+            <tr><td>3D 교통 차량</td><td><code>sim_adas</code>의 objs (세계 정답)</td></tr>
+            <tr><td>계기판 Stop &amp; Go</td><td><code>sim_adas</code>의 sg</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </div>
+
+  <section class="notes">
+    <h2>함께 알아 둘 것</h2>
+    <p><strong>지연</strong>: Stop &amp; Go가 정한 가속도는 다음 주기(50 ms 뒤)에 속도로 바뀝니다. 실제 차의 제어 지연과 비슷한 구조입니다.</p>
+    <p><strong>반복 가능</strong>: 센서 모델의 난수 시드가 고정이라 같은 시나리오는 언제 돌려도 같은 프레임, 같은 판정 시각이 나옵니다.</p>
+    <p><strong>시나리오 Z05~Z07을 만들며 본 동작</strong>: 지도 도로의 꺾임 때문에 예측 경로가 30~40 m 앞에서 ±2.5 m 흔들려 길가 물체를 경로 안으로 잡을 수 있습니다. 끼어드는 차가 빠르면(가로 1.5 m/s 이상) 트랙이 둘로 갈라졌다 합쳐지며 운전자 개입 요청이 뜰 수 있습니다. XS9는 정지할 때 앞에 있던 트랙을 차량인지와 관계없이 예외로 둡니다. <code>adas on</code>은 세계를 초기화하므로 지도 시나리오는 그 뒤 <code>wait 0.05</code>를 둡니다.</p>
+    <p><strong>문서</strong>: 요구사항 <code>docs/radar-requirements.md</code>, 설계·시험 기록 <code>docs/radar-stop-and-go.md</code>, 시험 <code>tests/test_radar.c</code> · <code>tests/test_stopgo.c</code>, 시연 <code>scenarios/Z05~Z07</code>.</p>
+  </section>
+</div>
+
+</body></html>
