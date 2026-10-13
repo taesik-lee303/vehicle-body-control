@@ -11,7 +11,8 @@ export const SWC_FIELDS = {
 };
 
 const NS = 'http://www.w3.org/2000/svg';
-const PULSE_MS = 400; // 라벨이 바뀐 화살표를 깜박이는 시간
+const PULSE_MS = 400; // 라벨이 바뀐 화살표를 깜박이는 시간 (수동·일시정지)
+const FLOW_STAGE_MS = 500; // 시나리오 재생 중 데이터 흐름 한 단계 (벽시계, 배속과 무관): 입력 → VBC → SWC → ECU
 
 // 코드 → 이름 (modcon.c 별칭과 같은 순서). 이름 배열 밖은 C의 name_or처럼 "INVALID"
 const IGN = ['off', 'on'];
@@ -120,20 +121,42 @@ function arrow(parent, x1, y1, x2, y2, labelX, labelY, cls) {
   const py = Math.cos(ang) * 5;
   const r = (v) => Math.round(v * 10) / 10;
   el('line', { class: 'shaft', x1, y1, x2: r(bx), y2: r(by) }, g);
+  el('line', { class: 'flow', x1, y1, x2: r(bx), y2: r(by) }, g); // 데이터 흐름 (시나리오 재생 중만 보임)
   el('path', { class: 'head', d: `M${x2} ${y2}L${r(bx + px)} ${r(by + py)}L${r(bx - px)} ${r(by - py)}Z` }, g);
   const label = el('text', { class: 'lbl', x: labelX, 'data-y': labelY }, g);
-  return { g, label, prev: undefined, until: 0 };
+  return { g, label, prev: undefined, until: 0, from: 0, to: 0 };
 }
 
-// 라벨이 이전 렌더와 다르면 PULSE_MS 동안 pulse 클래스
-function setLabel(a, lines, now, lineH = 13) {
+// 라벨을 쓰고, 이전 렌더와 달라졌으면 true. pulse면 PULSE_MS 동안 pulse 클래스 (수동·일시정지의 깜박임)
+function setLabel(a, lines, now, pulse, lineH = 13) {
   const s = lines.join('\n');
+  let changed = false;
   if (s !== a.prev) {
-    if (a.prev !== undefined) a.until = now + PULSE_MS;
+    changed = a.prev !== undefined;
+    if (changed && pulse) a.until = now + PULSE_MS;
     writeLines(a.label, lines, lineH);
     a.prev = s;
   }
-  a.g.classList.toggle('pulse', now < a.until);
+  a.g.classList.toggle('pulse', pulse && now < a.until);
+  return changed;
+}
+
+// 흐름 예약: from부터 FLOW_STAGE_MS 동안. 이미 흐르는 중이거나 예약이 남아 있으면 구간을 늘리기만 한다
+// (처음부터 다시 시작하지 않으므로 10배속처럼 변화가 잦아도 끊기지 않고 이어서 흐른다)
+function flowAt(a, from, now) {
+  const to = from + FLOW_STAGE_MS;
+  if (a.to > now) {
+    a.from = Math.min(a.from, from);
+    a.to = Math.max(a.to, to);
+  } else {
+    a.from = from;
+    a.to = to;
+  }
+}
+
+function showFlow(a, now, flow) {
+  if (!flow) a.from = a.to = 0;
+  a.g.classList.toggle('flowing', flow && a.from <= now && now < a.to);
 }
 
 function box(parent, x, y, w, h, cls) {
@@ -206,11 +229,19 @@ export function createDiagram(svgEl) {
   const link = arrow(svgEl, lx, slotMid(1) - 35, lx, slotMid(0) + 35, lx + 8, (slotMid(0) + slotMid(1)) / 2 + 12, 'link');
   text(link.g, lx + 8, (slotMid(0) + slotMid(1)) / 2 - 4, 'L6 와이퍼 단계', 'link-cap');
 
-  function render(st) {
+  const allArrows = [...inputs.map((x) => x.a), ...swcs.flatMap((s) => [s.ctxArrow, s.outArrow]), link];
+
+  // opts.flow: 시나리오 재생 중(main.js가 정함). 깜박임 대신 0.5초 단계 데이터 흐름 + ECU 부드러운 전환.
+  // 아니면(수동·일시정지) 지금처럼 값이 바뀐 화살표를 깜박인다. 둘 다 표시만 바꾸며 엔진 호출·시각과 무관하다
+  function render(st, opts = {}) {
     const now = performance.now();
+    const flow = Boolean(opts.flow);
+    const pulse = !flow;
     const swcOn = new Set(st.swc);
     const sigOn = new Set(st.signals);
+    svgEl.classList.toggle('flow-mode', flow);
     setText(bcuTitle, `BCU system — ${st.title}`);
+    let inChanged = false; // 이번 렌더에 입력 화살표 값이 바뀜 → SWC 쪽은 다음 단계부터
 
     for (const { d, a } of inputs) {
       let lines;
@@ -225,17 +256,38 @@ export function createDiagram(svgEl) {
       } else {
         lines = [d.fmt(d.get(st.in))];
       }
-      setLabel(a, lines, now);
+      // 끊긴 입력은 VBC로 가지 않으므로 흐름을 그리지 않는다 (라벨의 tx 표시만 바뀜)
+      if (setLabel(a, lines, now, pulse) && flow && !cut && sigOn.has(d.key)) {
+        flowAt(a, now, now);
+        inChanged = true;
+      }
       a.g.classList.toggle('cut', cut);
       a.g.classList.toggle('fault', fault);
       a.g.classList.toggle('idle', !sigOn.has(d.key));
     }
 
+    let linkNext = null; // 와이퍼 → ECU와 같은 단계에 L6 링크도 흐름
     for (const s of swcs) {
       const on = swcOn.has(s.d.key);
       const fields = SWC_FIELDS[s.d.key].map((f) => `${f}=${st.ctx[f]}`);
-      setLabel(s.ctxArrow, pairs(fields), now);
-      setLabel(s.outArrow, OUT_LINES[s.d.key](st.out), now);
+      const ctxCh = setLabel(s.ctxArrow, pairs(fields), now, pulse);
+      const outCh = setLabel(s.outArrow, OUT_LINES[s.d.key](st.out), now, pulse);
+      // 흐름 단계: 입력이 바뀌었으면 VBC → SWC는 0.5초 뒤, SWC → ECU는 1초 뒤.
+      // 입력 변화 없이 바뀐 것(VBC 판정·SWC 시간 조건)은 그 화살표부터 바로 시작
+      if (flow && on) {
+        let next = null;
+        if (ctxCh) {
+          const t0 = inChanged ? now + FLOW_STAGE_MS : now;
+          flowAt(s.ctxArrow, t0, now);
+          next = t0 + FLOW_STAGE_MS;
+        } else if (outCh) {
+          next = now;
+        }
+        if (next !== null) {
+          flowAt(s.outArrow, next, now);
+          if (s.d.key === 'wiper') linkNext = next;
+        }
+      }
       s.swc.classList.toggle('active', on);
       s.swc.classList.toggle('idle', !on);
       s.ctxArrow.g.classList.toggle('idle', !on);
@@ -255,7 +307,10 @@ export function createDiagram(svgEl) {
     const src = st.link.source;
     link.g.classList.toggle('hidden', src === 'none');
     link.g.classList.toggle('inject', src === 'inject');
-    setLabel(link, [src === 'inject' ? `주입 ${st.link.wiper_level}` : st.link.wiper_level], now);
+    if (setLabel(link, [src === 'inject' ? `주입 ${st.link.wiper_level}` : st.link.wiper_level], now, pulse) && flow && src !== 'none')
+      flowAt(link, linkNext ?? now, now);
+
+    for (const a of allArrows) showFlow(a, now, flow);
   }
 
   return { render };

@@ -222,7 +222,8 @@ function draw() {
   }
   const st = engine.state();
   renderBar(st);
-  diagram.render(st);
+  // 시나리오가 흐르는 중에만 데이터 흐름 표시 (수동·일시정지 ⏭는 지금처럼 깜박임)
+  diagram.render(st, { flow: runner.active && sim.playing });
   panel.render(st);
 }
 

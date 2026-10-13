@@ -69,7 +69,7 @@ body { display: grid; grid-template-columns: 250px 1fr; grid-template-rows: auto
 #diagram .body { fill: #1b2029; stroke: #4b5568; stroke-width: 1.5; }
 #diagram .vbc .body { fill: #18202d; stroke: var(--accent); }
 
-/* 화살표: 기본 / 끊김(cut, 점선 회색) / C2·C4 판정 참(빨강) / 깜박임(값이 바뀐 순간) */
+/* 화살표: 기본 / 끊김(cut, 점선 회색) / C2·C4 판정 참(빨강) / 깜박임(값이 바뀐 순간, 수동·일시정지) */
 #diagram .arrow .shaft { stroke: #7b8596; stroke-width: 2; }
 #diagram .arrow .head { fill: #7b8596; }
 #diagram .arrow .lbl { font: 12px var(--mono); }
@@ -88,6 +88,20 @@ body { display: grid; grid-template-columns: 250px 1fr; grid-template-rows: auto
 #diagram .arrow.pulse .lbl { animation: pulse-text 0.4s ease-out; }
 @keyframes pulse-line { 0% { stroke: #fff; stroke-width: 5; } }
 @keyframes pulse-text { 0% { fill: #fff; } }
+/* 시나리오 재생 중 데이터 흐름 (flowing): 깜박임 대신 화살표를 따라 점이 흘러간다. 켜고 끌 때는 서서히.
+   애니메이션은 늘 돌고 투명도만 바뀌므로 흐름이 이어질 때 처음부터 다시 시작하지 않는다 */
+#diagram .arrow .flow { stroke: #a8d4ff; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2 18; opacity: 0;
+  pointer-events: none; transition: opacity 0.25s ease; animation: flow-march 0.3s linear infinite; }
+#diagram .arrow.flowing .flow { opacity: 0.9; }
+#diagram .arrow.cut .flow, #diagram .arrow.idle .flow { opacity: 0; }
+@keyframes flow-march { to { stroke-dashoffset: -20; } }
+@media (prefers-reduced-motion: reduce) { #diagram .arrow .flow { animation: none; } }
+/* 시나리오 재생 중에는 ECU·고장등·화살표 색이 바로 바뀌지 않고 0.3초 동안 부드럽게 바뀐다 */
+#diagram.flow-mode .ecu, #diagram.flow-mode .ecu .body, #diagram.flow-mode .ecu .badge, #diagram.flow-mode .ecu .badge rect,
+#diagram.flow-mode .ecu .mode, #diagram.flow-mode .ecu .box-title, #diagram.flow-mode .lamp circle,
+#diagram.flow-mode .lamp .lamp-name, #diagram.flow-mode .arrow .shaft, #diagram.flow-mode .arrow .head,
+#diagram.flow-mode .arrow .lbl {
+  transition: fill 0.3s ease, stroke 0.3s ease, opacity 0.3s ease, filter 0.3s ease; }
 #diagram .arrow.link .shaft { stroke: var(--accent); }
 #diagram .arrow.link .head { fill: var(--accent); }
 #diagram .arrow.link.inject .shaft { stroke: var(--warn); stroke-dasharray: 3 3; }
