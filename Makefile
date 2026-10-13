@@ -6,8 +6,8 @@
 # make wasm-ecu  → sim/build/ecu.js (ECU 시뮬레이터 엔진, emcc 필요)
 # make wasm-check → 터미널 콘솔 = WASM 엔진 출력 동일성 확인 (node 필요)
 # make sim-ecu   → wasm-ecu 후 http://localhost:8080/sim/ecu.html (BCU system 구성도, 저장소 루트 서빙)
-# make consoles  → 모듈별 대화형 테스트 콘솔 4개 빌드 (build/con_doors 등)
-# make con-doors / con-dashboard / con-lighting / con-wipers → 해당 콘솔 실행
+# make consoles  → 모듈별 대화형 테스트 콘솔 5개 빌드 (build/con_doors 등)
+# make con-doors / con-dashboard / con-lighting / con-wipers / con-ecu → 해당 콘솔 실행
 # make tc        → 모듈별 TC 전체 실행, 결과 문서 docs/test/tc-results.md 생성
 # make clean
 

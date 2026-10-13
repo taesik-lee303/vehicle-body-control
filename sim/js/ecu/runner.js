@@ -100,7 +100,7 @@ export class TcRunner {
       if (all || this.remaining < step) n = this.remaining; // 마지막 나머지 조각
       else {
         n = Math.min(this.remaining - (this.remaining % step), Math.floor(this.carry / step) * step);
-        if (n === 0) break;
+        if (n <= 0) break;
       }
       this.changes += this.engine.advance(n);
       this.remaining -= n;

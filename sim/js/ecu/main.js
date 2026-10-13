@@ -163,6 +163,8 @@ consoleSel.addEventListener('change', () => selectConsole(consoleSel.value));
 rateSel.addEventListener('change', () => setRate(Number(rateSel.value)));
 playBtn.addEventListener('click', togglePlay);
 $('stop').addEventListener('click', stop);
+// 시나리오를 바꾸면 이전 모드(재생 중이던 TC)를 이어 가지 않도록 정지
+scenarioSel.addEventListener('change', stop);
 $('step').addEventListener('click', step);
 
 // ---- 시간 진행 ----
@@ -227,7 +229,7 @@ function draw() {
 // ---- 루프: 벽시계 × 배속만큼 시뮬 시간을 흘리고, 상태를 읽어 그린다 ----
 let last = performance.now();
 function frame(now) {
-  const dt = Math.min(now - last, MAX_FRAME_MS);
+  const dt = Math.max(0, Math.min(now - last, MAX_FRAME_MS)); // 음수 진행 방어
   last = now;
   if (sim.playing) advance(dt * sim.rate, engine.state());
   draw();

@@ -9,7 +9,8 @@ export async function createEngine() {
   const exec = mod.cwrap('ecu_exec', 'number', ['string']);
   const engine = {
     select: (name) => select(name),       // 0 OK, 1 없는 이름. 성공하면 처음 상태로 시작
-    exec: (line) => exec(line),           // 0 OK, 1 오류, 2 quit
+    // 긴 줄은 wasm 스택(64KB)을 넘겨 엔진이 깨지므로 C 한도(1023바이트)로 먼저 자른다
+    exec: (line) => exec(String(line).slice(0, 1023)), // 0 OK, 1 오류, 2 quit
     advance: (ms) => mod._ecu_advance(ms), // 바뀐 출력·판정 수
     state: () => JSON.parse(mod.UTF8ToString(mod._ecu_state())),
     finish: () => mod._ecu_finish(),      // 요약 줄을 내고 FAIL이 있으면 1
