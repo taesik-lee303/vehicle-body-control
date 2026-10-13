@@ -1,6 +1,7 @@
 /*
  * con_ecu.c - BCU 전체(ECU) 테스트 콘솔. 실행: make con-ecu
  * SWC 4개를 모두 실행해 모듈 TC가 볼 수 없는 SWC 간 상호작용(L6, D5, C4)을 시험한다.
+ * 주행 모델(R1~R5, src/drive.c)도 이 콘솔에만 붙는다: drive on이면 시동·기어·속도를 운전 조작으로 만든다.
  */
 
 #include <stddef.h>
@@ -48,6 +49,7 @@ void con_ecu_define(ModCon *m)
         .start_ign = 0,
         .start_gear = GEAR_P,
         .state_cmd = NULL,
+        .has_drive = true, /* drive on|off, pedal: 주행 모델(R1~R5)이 시동·기어·속도를 만든다 */
     };
 }
 

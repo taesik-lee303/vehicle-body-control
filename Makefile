@@ -85,7 +85,7 @@ con-%: $(BUILD)/con_%
 
 # ---- ECU 시뮬레이터 엔진 (modcon을 WASM으로) ----
 ECU_OUT := sim/build/ecu.js
-ECU_SRCS := src/common.c src/wipers.c src/lighting.c src/doors.c src/dashboard.c \
+ECU_SRCS := src/common.c src/wipers.c src/lighting.c src/doors.c src/dashboard.c src/drive.c \
 	tools/consoles/modcon.c $(wildcard tools/consoles/con_*.c) tools/consoles/ecu_wasm.c
 ECU_EMFLAGS := -O2 -sMODULARIZE -sEXPORT_ES6 -sSINGLE_FILE -sENVIRONMENT=web,node \
 	-sEXPORTED_FUNCTIONS=_ecu_select,_ecu_exec,_ecu_advance,_ecu_state,_ecu_finish \

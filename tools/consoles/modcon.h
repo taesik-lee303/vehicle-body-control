@@ -18,6 +18,7 @@
 #define MODCON_H
 
 #include "common.h"
+#include "drive.h"
 
 /* 메뉴에 보여 줄 신호 (모듈이 쓰는 입력). 명령으로는 모든 신호를 넣을 수 있다 */
 enum {
@@ -68,6 +69,10 @@ struct ModCon {
     bool (*mod_get_state)(ModCon *m);
     void (*mod_set_state)(ModCon *m, bool v); /* 상태와 그에 맞는 출력을 함께 바꾼다 */
 
+    /* 주행 모델 (R1~R5, 선택). true면 drive·pedal 명령을 쓸 수 있다 (ECU 콘솔).
+     * drive on이면 시동·기어·속도를 운전 조작으로 만든다 (REAL SIM src/console.c와 같은 규칙) */
+    bool has_drive;
+
     /* 지금 보내고 있는 원래 값 (코드 그대로) */
     int32_t ign, gear, speed, lux, rain;
     int32_t wiper_level;
@@ -75,6 +80,15 @@ struct ModCon {
     bool auto_send;          /* 주기 신호 자동 재송신 */
     vbc_ms_t send_period_ms; /* 기본 50 (사양서 3.1: 0.5초보다 짧게) */
     vbc_ms_t step_period_ms; /* 기본 1 (1ms마다 판단) */
+
+    Drive drive;   /* 주행 모델 상태 (has_drive일 때만 씀) */
+    bool drive_on; /* true면 ign·gear는 주행 모델 요청(R1, R2), speed는 주행 모델이 50ms마다 정한다 */
+    /* 화면 표시용 (state JSON만, 터미널 출력과 판정에는 쓰지 않음). drive on 중 마지막 시동·기어 요청
+     * (받아들여졌든 거부됐든, -1 = 없음), 요청 횟수 (같은 값을 다시 요청해도 화면이 알 수 있게),
+     * 마지막 거부 (NULL, "R1", "R2": 다음 요청이 받아들여지거나 drive on|off가 바뀔 때까지) */
+    int32_t req_ign, req_gear;
+    unsigned req_ign_n, req_gear_n;
+    const char *refused;
 
     bool interactive; /* modcon_run이 켬: 인자 없으면 되묻기. 꺼져 있으면 오류로 처리 */
     bool err;         /* 이번 명령에서 '!' 오류가 났는지 */

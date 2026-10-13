@@ -21,6 +21,8 @@ enum { P_SPEED = 1, P_GEAR = 2, P_IGN = 4, P_LUX = 8, P_RAIN = 16,
        P_VEHICLE = P_SPEED | P_GEAR | P_IGN, P_ALL = 31 };
 
 #define MAX_TIME_MS 600000L
+/* 주행 모델 진행 간격 (REAL SIM src/console.h CONSOLE_TICK_MS와 같음). 0초부터 50ms 배수 시각마다 한 번 */
+#define DRIVE_TICK_MS 50u
 
 /* ---- 코드표 (보여 주기만 하고 막지 않는다) ---- */
 
@@ -259,6 +261,20 @@ static void step_now(ModCon *m)
         printf("  → 변화 없음\n");
 }
 
+/* drive on일 때 (from, to] 사이: 1ms씩 보며 50ms 배수 시각이면 주행 모델을 50ms 진행해 속도를 정하고(R1~R5),
+ * 송신 시각이면 보낸다. REAL SIM console_advance와 같은 순서 (주행 모델 → 그 시각 송신 → 판단) */
+static void drive_and_send(ModCon *m, vbc_ms_t from, vbc_ms_t to)
+{
+    for (vbc_ms_t t = from + 1; t <= to; t++) {
+        if (t % DRIVE_TICK_MS == 0) {
+            drive_step(&m->drive, DRIVE_TICK_MS);
+            m->speed = drive_speed_kmh(&m->drive); /* 반올림한 km/h */
+        }
+        if (m->auto_send && m->send_period_ms && t % m->send_period_ms == 0)
+            send(m, t, P_ALL & ~m->cut);
+    }
+}
+
 /* ms만큼 진행: step 주기마다 판단, 자동 재송신이면 send 주기의 배수 시각에 끊지 않은 신호를 보낸다 */
 int modcon_advance(ModCon *m, long ms)
 {
@@ -269,7 +285,9 @@ int modcon_advance(ModCon *m, long ms)
     while (m->now + sp <= end) {
         vbc_ms_t from = m->now;
         m->now += sp;
-        if (m->auto_send && m->send_period_ms) {
+        if (m->drive_on) {
+            drive_and_send(m, from, m->now);
+        } else if (m->auto_send && m->send_period_ms) {
             vbc_ms_t first = (from / m->send_period_ms + 1) * m->send_period_ms;
             for (vbc_ms_t t = first; t <= m->now; t += m->send_period_ms)
                 send(m, t, P_ALL & ~m->cut);
@@ -278,6 +296,13 @@ int modcon_advance(ModCon *m, long ms)
     }
     m->now = end; /* step 주기로 나누어떨어지지 않는 나머지 (판단은 다음 step에서) */
     return changes;
+}
+
+/* 화면 표시용 요청 기록(req_ign·req_gear·refused)을 비운다. 횟수는 두어 다음 요청도 바뀜으로 보이게 한다 */
+static void drive_clear_requests(ModCon *m)
+{
+    m->req_ign = m->req_gear = -1;
+    m->refused = NULL;
 }
 
 static void reset(ModCon *m)
@@ -293,6 +318,10 @@ static void reset(ModCon *m)
     m->send_period_ms = 50;
     m->step_period_ms = 1;
     m->now = 0;
+    drive_init(&m->drive); /* 주행 모델 꺼짐 (REAL SIM console_init과 같음) */
+    m->drive_on = false;
+    drive_clear_requests(m);
+    m->req_ign_n = m->req_gear_n = 0;
     vbc_inputs_init(&m->in);
     vbc_outputs_init(&m->out);
     m->mod_init(m);
@@ -337,6 +366,14 @@ static void print_status(ModCon *m)
            yes_no(x->ignition_valid), yes_no(x->gear_valid), yes_no(x->door_valid[0]), yes_no(x->door_valid[1]),
            yes_no(x->door_valid[2]), yes_no(x->door_valid[3]), yes_no(x->light_sw_valid), yes_no(x->wiper_sw_valid));
 
+    if (m->has_drive) {
+        static const char *const TH[] = {"없음", "보통", "풀"};
+        if (m->drive_on)
+            printf("  [주행 모델 R1~R5] 켜짐 | 스로틀 %s | 브레이크 %s | 속도 %d km/h (페달이 정함)\n",
+                   TH[m->drive.throttle], on_off(m->drive.brake), (int)drive_speed_kmh(&m->drive));
+        else
+            printf("  [주행 모델 R1~R5] 꺼짐 (speed로 직접 입력, drive on으로 켬)\n");
+    }
     printf("  [입력 바꾸기] 번호 또는 명령 (예: gear 7, speed 15, cut speed, t 0.501)\n");
     int no = 0;
     for (int k = 0; k < K_COUNT; k++) {
@@ -362,6 +399,15 @@ static void help(const ModCon *m)
     if (m->state_cmd)
         printf("    %-6s on|off      %s 주입 (0·off %s, 1·on %s). 사양서 입력이 아닌 모듈 상태, 넣은 시각에 바로 판단\n",
                m->state_cmd, m->state_label, m->state_words[0], m->state_words[1]);
+    if (m->has_drive) /* 수치는 src/drive.h DRIVE_* 그대로 (R5) */
+        printf("    drive on|off        주행 모델(R1~R5). on: 시동·기어·속도를 운전 조작으로 만듦 (off: speed로 직접 입력)\n"
+               "                        on 하는 순간의 시동·기어·속도를 이어받음 (속도는 0~최고 속도로 제한)\n"
+               "    pedal <0|1|2> <0|1> 스로틀(0 없음, 1 보통, 2 풀) 브레이크(0|1). 다음 pedal까지 유지 (drive on 중에만)\n"
+               "                        drive on 중: ign·gear는 정지 상태에서만 바뀜 (R1, R2, 안 되면 '✘ 거부'),\n"
+               "                        speed는 쓸 수 없음, %ums마다 주행 모델 진행 → 속도 (가속 보통 +%d, 풀 +%d,\n"
+               "                        브레이크 -%d, 타력 -%d km/h/s, 최고 전진 %d·후진 %d km/h)\n",
+               DRIVE_TICK_MS, DRIVE_ACCEL_NORMAL, DRIVE_ACCEL_FULL, DRIVE_BRAKE, DRIVE_COAST, DRIVE_MAX_FORWARD,
+               DRIVE_MAX_REVERSE);
     printf("    t <초>              시간 진행, 1ms 단위 (예: t 0.499, t 0.001, t 3)\n"
            "    cut <신호>          주기 신호 송신 끊기: speed gear ign lux rain vehicle(앞 셋) all\n"
            "    resume <신호>       송신 다시 시작 (그 시각에 바로 보냄)\n"
@@ -374,7 +420,7 @@ static void help(const ModCon *m)
            "    obs <항목>          관찰만 기록 (사양서에 정해지지 않은 동작)\n"
            "      항목: lock headlight luxlamp rainlamp (on|off), wiper (stop|int|low|high), warning (none|door|lux|rain),\n"
            "            rxlost ignon speedvalid luxfault rainfault ignvalid gearvalid doorvalid lightvalid wipervalid (yes|no)\n"
-           "            ign (on|off), speed <km/h>: 입력한(보내는) 값 확인 (e만, REAL SIM expect ign·speed와 같음)\n"
+           "            ign (on|off), gear (p|r|n|d), speed <km/h>: 입력한(보내는) 값 확인 (e만, REAL SIM expect ign·gear·speed와 같음)\n"
            "    show                지금 상태,  r 처음 상태(C5)로,  q 종료\n"
            "  입력을 바꾸면 그 시각에 바로 판단하고, 바뀐 출력·판정을 '→'로 보여 줍니다. 다른 모듈은 실행되지 않습니다.\n");
 }
@@ -420,15 +466,27 @@ static const char *tc_label(const ModCon *m)
     return m->tc[0] ? m->tc : "-";
 }
 
-/* e ign / e speed: 입력한(보내는) 값 확인. REAL SIM expect ign·speed와 같은 값(panel.ignition·panel.speed =
- * 명령으로 넣은 값, VBC가 받은 값이 아님)을 본다. 끊어도(cut) 입력한 값은 그대로다 */
+/* e gear의 값 이름 (REAL SIM expect gear와 같은 p|r|n|d) */
+static const char *gear_word(int32_t v)
+{
+    static const char *const W[] = {"p", "r", "n", "d"};
+    return v >= GEAR_P && v <= GEAR_D ? W[v] : "?";
+}
+
+/* e ign / e gear / e speed: 입력한(보내는) 값 확인. REAL SIM expect ign·gear·speed와 같은 값(panel.ignition·
+ * panel.gear·panel.speed = 명령으로 넣은 값, VBC가 받은 값이 아님)을 본다. 끊어도(cut) 입력한 값은 그대로다.
+ * drive on이면 시동·기어는 받아들여진 요청(R1, R2), 속도는 주행 모델이 정한 값이다 (REAL SIM과 같음) */
 static void expect_input(ModCon *m, const char *item, const char *want)
 {
     bool is_ign = ieq(item, "ign");
-    int32_t expected, actual = is_ign ? m->ign : m->speed;
+    bool is_gear = ieq(item, "gear");
+    int32_t expected, actual = is_ign ? m->ign : is_gear ? m->gear : m->speed;
 
-    if (is_ign ? !(ieq(want, "on") || ieq(want, "off")) : !parse_value(want, NO_ALIAS, &expected)) {
-        oops(m, is_ign ? "  ! ign의 값은 on|off입니다: %s\n" : "  ! speed의 값은 숫자입니다: %s\n", want);
+    if (is_ign ? !(ieq(want, "on") || ieq(want, "off"))
+               : is_gear ? !parse_value(want, GEAR_ALIAS, &expected) || expected < GEAR_P || expected > GEAR_D
+                         : !parse_value(want, NO_ALIAS, &expected)) {
+        oops(m, is_ign ? "  ! ign의 값은 on|off입니다: %s\n"
+                : is_gear ? "  ! gear의 값은 p|r|n|d입니다: %s\n" : "  ! speed의 값은 숫자입니다: %s\n", want);
         return;
     }
     if (is_ign)
@@ -437,6 +495,8 @@ static void expect_input(ModCon *m, const char *item, const char *want)
     if (actual == expected) {
         if (is_ign) printf("  ✔ PASS [%s] ign = %s  (%u.%03us)\n", tc_label(m), expected ? "on" : "off",
                            (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
+        else if (is_gear) printf("  ✔ PASS [%s] gear = %s  (%u.%03us)\n", tc_label(m), gear_word(expected),
+                                 (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
         else printf("  ✔ PASS [%s] speed = %d  (%u.%03us)\n", tc_label(m), (int)expected,
                     (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
         return;
@@ -445,6 +505,8 @@ static void expect_input(ModCon *m, const char *item, const char *want)
     m->tc_has_fail = true;
     if (is_ign) printf("  ✘ FAIL [%s] ign: 기대 %s, 실제 %s  (%u.%03us)\n", tc_label(m), expected ? "on" : "off",
                        actual == 0 ? "off" : actual == 1 ? "on" : "?", (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
+    else if (is_gear) printf("  ✘ FAIL [%s] gear: 기대 %s, 실제 %s  (%u.%03us)\n", tc_label(m), gear_word(expected),
+                             gear_word(actual), (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
     else printf("  ✘ FAIL [%s] speed: 기대 %d, 실제 %d  (%u.%03us)\n", tc_label(m), (int)expected, (int)actual,
                 (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
 }
@@ -454,7 +516,7 @@ static void cmd_expect(ModCon *m, const char *item, const char *want)
     int v, nw;
     const char *const *w;
 
-    if (item && want && (ieq(item, "ign") || ieq(item, "speed"))) {
+    if (item && want && (ieq(item, "ign") || ieq(item, "gear") || ieq(item, "speed"))) {
         expect_input(m, item, want);
         return;
     }
@@ -546,11 +608,106 @@ static void set_state(ModCon *m, const char *arg)
     step_now(m);
 }
 
+/* ---- 주행 모델 (R1~R5). 규칙·메시지는 REAL SIM src/console.c(feature/sim-realism)와 같다 ---- */
+
+/* drive on|off: on이면 지금 시동·기어·속도를 이어받고, 페달은 둘 다 뗀다 (REAL SIM cmd_drive) */
+static void cmd_drive(ModCon *m, const char *a)
+{
+    if (!a || !(ieq(a, "on") || ieq(a, "off"))) {
+        oops(m, "  ! 사용법: drive on|off\n");
+        return;
+    }
+    bool on = ieq(a, "on");
+    if (on && !m->drive_on) {
+        /* 주행 모델은 시동 on|off, 기어 P|R|N|D만 다룬다. 정의 안 된 코드는 이어받을 수 없다 */
+        if ((m->ign != 0 && m->ign != 1) || m->gear < GEAR_P || m->gear > GEAR_D) {
+            oops(m, "  ! drive on: 시동(%d)·기어(%d)가 정의 안 된 코드입니다. ign on|off, gear p|r|n|d로 먼저 정하세요\n",
+                 (int)m->ign, (int)m->gear);
+            return;
+        }
+        drive_init(&m->drive);
+        m->drive.ignition = m->ign == 1;
+        m->drive.gear = (Gear)m->gear;
+        /* modcon은 int32 아무 값이나 받으므로, drive_set_speed_kmh의 ×1000이 넘치지 않게 먼저 0~전진 최고로
+         * 제한한다 (결과는 같다: drive_set_speed_kmh도 0~그 기어의 최고 속도로 제한) */
+        drive_set_speed_kmh(&m->drive, m->speed < 0 ? 0 : m->speed > DRIVE_MAX_FORWARD ? DRIVE_MAX_FORWARD : m->speed);
+        m->speed = drive_speed_kmh(&m->drive);
+    }
+    if (on != m->drive_on)
+        drive_clear_requests(m); /* 화면 표시용: 켜고 끌 때 지난 요청·거부를 지운다 */
+    m->drive_on = on;
+    drive_set_pedals(&m->drive, THROTTLE_NONE, false);
+    printf("  주행 모델 %s\n", on ? "켜짐 (pedal, gear, ign으로 운전)" : "꺼짐 (speed로 직접 입력)");
+}
+
+/* pedal <스로틀 0|1|2> <브레이크 0|1>: 누르고 있는 상태 (다음 pedal 명령까지 유지, REAL SIM cmd_pedal) */
+static void cmd_pedal(ModCon *m, const char *t, const char *b)
+{
+    int32_t th, br;
+
+    if (!m->drive_on) {
+        oops(m, "  ! pedal은 drive on 이후에 쓸 수 있습니다\n");
+        return;
+    }
+    if (!t || !b || !parse_value(t, NO_ALIAS, &th) || !parse_value(b, NO_ALIAS, &br) || th < 0 || th > 2 || br < 0 ||
+        br > 1) {
+        oops(m, "  ! 사용법: pedal <스로틀 0|1|2> <브레이크 0|1>  (2 = 풀 스로틀)\n");
+        return;
+    }
+    drive_set_pedals(&m->drive, (Throttle)th, br != 0);
+}
+
+/* drive on 중 speed는 페달이 정한다 (REAL SIM과 같이 '!' 오류). 막았으면 true */
+static bool drive_blocks_speed(ModCon *m, SigKey k)
+{
+    if (!m->drive_on || k != K_SPEED)
+        return false;
+    oops(m, "  ! drive on 중에는 속도가 페달로 정해집니다. 직접 입력하려면 drive off\n");
+    return true;
+}
+
+/* 신호 입력. drive on 중 시동·기어는 주행 모델 요청이고, 정지 상태가 아니면 거부한다 (R1, R2) */
+static void set_input(ModCon *m, SigKey k, int32_t v)
+{
+    if (m->drive_on && k == K_IGN) {
+        if (v != 0 && v != 1) {
+            oops(m, "  ! drive on 중에는 ign on|off만 됩니다. 정의 안 된 코드는 drive off 후에 보내세요\n");
+            return;
+        }
+        m->req_ign = v; /* 화면 표시용 (state JSON) */
+        m->req_ign_n++;
+        m->refused = NULL;
+        if (!drive_request_ignition(&m->drive, v == 1)) {
+            m->refused = "R1";
+            printf("  ✘ 거부(R1): 시동은 정지 상태(속도 0)에서만 켜고 끌 수 있습니다. 속도 %dkm/h\n", (int)m->speed);
+            return;
+        }
+    }
+    if (m->drive_on && k == K_GEAR) {
+        if (v < GEAR_P || v > GEAR_D) {
+            oops(m, "  ! drive on 중에는 gear p|r|n|d만 됩니다. 정의 안 된 코드는 drive off 후에 보내세요\n");
+            return;
+        }
+        m->req_gear = v; /* 화면 표시용 (state JSON) */
+        m->req_gear_n++;
+        m->refused = NULL;
+        if (!drive_request_gear(&m->drive, (Gear)v)) {
+            m->refused = "R2";
+            printf("  ✘ 거부(R2): 기어 변경은 정지 상태(속도 0)에서만 됩니다. 현재 %s, 속도 %dkm/h\n",
+                   vbc_gear_name(m->drive.gear), (int)m->speed);
+            return;
+        }
+    }
+    set_signal(m, k, v);
+}
+
 static void ask_and_set(ModCon *m, SigKey k)
 {
     char buf[128];
     int32_t v;
 
+    if (drive_blocks_speed(m, k))
+        return;
     if (!m->interactive) {
         oops(m, "  ! %s: 값을 함께 입력하세요 (h 도움말)\n", SIGS[k].cmd);
         return;
@@ -562,7 +719,7 @@ static void ask_and_set(ModCon *m, SigKey k)
         oops(m, "  ! 정수(int32) 또는 이름(%s)을 입력하세요. 소수·글자는 이 신호의 형식(정수)으로 보낼 수 없습니다\n", SIGS[k].codes);
         return;
     }
-    set_signal(m, k, v);
+    set_input(m, k, v);
 }
 
 /* 한 줄 실행. q면 false */
@@ -650,15 +807,19 @@ static bool exec_line(ModCon *m, char *line)
         return true;
     }
 
+    if (m->has_drive && ieq(cmd, "drive")) { cmd_drive(m, a1); return true; }
+    if (m->has_drive && ieq(cmd, "pedal")) { cmd_pedal(m, a1, a2); return true; }
+
     int k = find_sig(cmd);
     if (k >= 0) {
         int32_t v;
+        if (drive_blocks_speed(m, (SigKey)k)) return true;
         if (!a1) { ask_and_set(m, (SigKey)k); return true; }
         if (!parse_value(a1, SIGS[k].alias, &v)) {
             oops(m, "  ! %s: 정수(int32) 또는 이름(%s). 소수·글자는 신호 형식(정수)으로 보낼 수 없습니다\n", SIGS[k].cmd, SIGS[k].codes);
             return true;
         }
-        set_signal(m, (SigKey)k, v);
+        set_input(m, (SigKey)k, v);
         return true;
     }
 
@@ -814,6 +975,19 @@ const char *modcon_state_json(const ModCon *m)
         jf(&b, "]},");
     } else {
         jf(&b, "\"state\":null,");
+    }
+
+    if (m->has_drive) {
+        static const char *const TH[] = {"none", "normal", "full"};
+        jf(&b, "\"drive\":{\"on\":%s,\"throttle\":\"%s\",\"brake\":%s,\"speed_kmh\":%d,", jbool(m->drive_on),
+           name_or(TH, 3, (int32_t)m->drive.throttle), jbool(m->drive.brake), (int)drive_speed_kmh(&m->drive));
+        /* 마지막 시동·기어 요청 (없으면 null), 요청 횟수, 마지막 거부 (R1, R2) */
+        if (m->req_ign >= 0) jf(&b, "\"req_ign\":%d,", (int)m->req_ign); else jf(&b, "\"req_ign\":null,");
+        if (m->req_gear >= 0) jf(&b, "\"req_gear\":%d,", (int)m->req_gear); else jf(&b, "\"req_gear\":null,");
+        jf(&b, "\"req_ign_n\":%u,\"req_gear_n\":%u,\"refused\":", m->req_ign_n, m->req_gear_n);
+        if (m->refused) jf(&b, "\"%s\"},", m->refused); else jf(&b, "null},");
+    } else {
+        jf(&b, "\"drive\":null,");
     }
 
     jf(&b, "\"tc\":{\"id\":");
