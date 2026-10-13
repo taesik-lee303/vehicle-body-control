@@ -3,3 +3,9 @@ Z02_W_wipers.txt
 Z03_D_doors.txt
 C4_rx_lost.txt
 L2_dark_turns_on.txt
+Z04_R_drive.txt
+R1_ignition_only_at_stop.txt
+R2_gear_only_at_stop.txt
+R3_gear_and_motion.txt
+R4_brake_priority.txt
+R5_top_speed.txt

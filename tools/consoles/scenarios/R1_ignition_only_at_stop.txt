@@ -1,0 +1,31 @@
+# REAL SIM 형식에서 변환: feature/sim-realism:scenarios/R1_ignition_only_at_stop.txt (브랜치 7c3fd6e, 파일 마지막 변경 1566bbe)
+# 변환: wait → t, expect → e, 줄 끝 '# 설명' → 바로 위 설명 줄. drive·pedal은 그대로. 기대값은 바꾸지 않음
+#       '#@' 줄이 없어 머리 설명의 요구사항 문장을 tc 줄 하나로 붙임 (화면의 진행 중 TC·터미널 판정 줄에 보임)
+# 실행: ./build/con_ecu < tools/consoles/scenarios/R1_ignition_only_at_stop.txt  (ECU 콘솔 전용, 주행 모델 drive·pedal)
+
+# R1 시동이 꺼져 있으면 차는 움직이지 않는다. 시동은 정지 상태에서만 켜고 끌 수 있다.
+# 전제: 주행 모델 ON, 초기 상태(시동 OFF, 기어 P)에서 시작
+tc R1_ignition_only_at_stop | R1 | 시연 시나리오 | REAL SIM R1_ignition_only_at_stop | 시동이 꺼져 있으면 차는 움직이지 않는다. 시동은 정지 상태에서만 켜고 끌 수 있다.
+drive on
+gear d
+pedal 2 0
+t 3
+# 시동 OFF: 풀 스로틀이어도 정지
+e speed 0
+ign on
+t 1
+# 시동 ON: 풀 스로틀 25 km/h/s
+e speed 25
+# 주행 중 시동 끄기 → 거부
+ign off
+e ign on
+pedal 0 1
+t 0.6
+# 25 - 40×0.6 = 1 km/h
+e speed 1
+t 0.05
+# 0에서 멈춤
+e speed 0
+# 정지 상태: 허용
+ign off
+e ign off

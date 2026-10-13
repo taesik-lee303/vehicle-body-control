@@ -1,0 +1,35 @@
+# REAL SIM 형식에서 변환: feature/sim-realism:scenarios/R5_top_speed.txt (브랜치 7c3fd6e, 파일 마지막 변경 1566bbe)
+# 변환: wait → t, expect → e, 줄 끝 '# 설명' → 바로 위 설명 줄. drive·pedal은 그대로. 기대값은 바꾸지 않음
+#       '#@' 줄이 없어 머리 설명의 요구사항 문장을 tc 줄 하나로 붙임 (화면의 진행 중 TC·터미널 판정 줄에 보임)
+# 실행: ./build/con_ecu < tools/consoles/scenarios/R5_top_speed.txt  (ECU 콘솔 전용, 주행 모델 drive·pedal)
+
+# R5 최고 속도는 전진 250 km/h, 후진 20 km/h. 가속 정도: 보통 +10, 풀 +25, 브레이크 -40, 타력 -5 km/h/s
+tc R5_top_speed | R5 | 시연 시나리오 | REAL SIM R5_top_speed | 최고 속도는 전진 250 km/h, 후진 20 km/h. 가속 정도: 보통 +10, 풀 +25, 브레이크 -40, 타력 -5 km/h/s
+drive on
+ign on
+gear d
+pedal 2 0
+t 9.95
+# 248.75
+e speed 249
+t 0.05
+# 250.00 도달
+e speed 250
+t 5
+# 더 오르지 않음
+e speed 250
+# 250은 유효한 속도 (C3), 입력은 계속 송신 중
+e rxlost no
+pedal 0 1
+t 6.25
+e speed 0
+gear r
+pedal 2 0
+t 0.7
+# 17.5
+e speed 18
+t 0.1
+# 후진 최고 20
+e speed 20
+t 3
+e speed 20

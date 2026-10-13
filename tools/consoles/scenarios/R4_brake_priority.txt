@@ -1,0 +1,31 @@
+# REAL SIM 형식에서 변환: feature/sim-realism:scenarios/R4_brake_priority.txt (브랜치 7c3fd6e, 파일 마지막 변경 1566bbe)
+# 변환: wait → t, expect → e, 줄 끝 '# 설명' → 바로 위 설명 줄. drive·pedal은 그대로. 기대값은 바꾸지 않음
+#       '#@' 줄이 없어 머리 설명의 요구사항 문장을 tc 줄 하나로 붙임 (화면의 진행 중 TC·터미널 판정 줄에 보임)
+# 실행: ./build/con_ecu < tools/consoles/scenarios/R4_brake_priority.txt  (ECU 콘솔 전용, 주행 모델 drive·pedal)
+
+# R4 브레이크를 밟으면 속도가 줄어 0에서 멈추고, 가속도 브레이크도 없으면 천천히 줄어든다.
+#    가속과 브레이크가 함께 입력되면 브레이크가 우선한다.
+tc R4_brake_priority | R4 | 시연 시나리오 | REAL SIM R4_brake_priority | 브레이크를 밟으면 속도가 줄어 0에서 멈추고, 가속도 브레이크도 없으면 천천히 줄어든다. 가속과 브레이크가 함께 입력되면 브레이크가 우선한다.
+drive on
+ign on
+gear d
+pedal 2 0
+t 4
+# 풀 스로틀 25 km/h/s × 4초
+e speed 100
+pedal 0 0
+t 2
+# 타력 5 km/h/s × 2초
+e speed 90
+# 가속 + 브레이크 동시
+pedal 2 1
+t 1
+# 브레이크 우선: 40 km/h/s 감속
+e speed 50
+pedal 0 1
+t 1.25
+# 0에서 멈춤
+e speed 0
+t 1
+# 음수로 내려가지 않음
+e speed 0

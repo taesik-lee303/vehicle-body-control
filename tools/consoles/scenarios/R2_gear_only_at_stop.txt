@@ -1,0 +1,27 @@
+# REAL SIM 형식에서 변환: feature/sim-realism:scenarios/R2_gear_only_at_stop.txt (브랜치 7c3fd6e, 파일 마지막 변경 1566bbe)
+# 변환: wait → t, expect → e, 줄 끝 '# 설명' → 바로 위 설명 줄. drive·pedal은 그대로. 기대값은 바꾸지 않음
+#       '#@' 줄이 없어 머리 설명의 요구사항 문장을 tc 줄 하나로 붙임 (화면의 진행 중 TC·터미널 판정 줄에 보임)
+# 실행: ./build/con_ecu < tools/consoles/scenarios/R2_gear_only_at_stop.txt  (ECU 콘솔 전용, 주행 모델 drive·pedal)
+
+# R2 기어 변경은 정지 상태(속도 0)에서만 된다.
+tc R2_gear_only_at_stop | R2 | 시연 시나리오 | REAL SIM R2_gear_only_at_stop | 기어 변경은 정지 상태(속도 0)에서만 된다.
+drive on
+ign on
+gear d
+pedal 1 0
+t 2
+e speed 20
+# 주행 중 → 거부
+gear p
+e gear d
+# 주행 중 → 거부
+gear r
+e gear d
+pedal 0 1
+t 0.5
+e speed 0
+# 정지 → 허용
+gear p
+e gear p
+gear r
+e gear r

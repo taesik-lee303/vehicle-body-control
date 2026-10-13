@@ -1,0 +1,191 @@
+# REAL SIM 형식에서 변환: exp/sim-realism:scenarios/Z04_R_drive.txt (브랜치 b3673b9, 파일 마지막 변경 b3673b9)
+# 변환: wait → t, expect → e, 줄 끝 '# 설명' → 바로 위 설명 줄. drive·pedal은 그대로. 기대값은 바꾸지 않음
+#       '#@ 요구사항' 줄은 그대로 두고 아래에 tc 줄을 붙임 (화면의 진행 중 TC·터미널 판정 줄에 보임)
+# 실행: ./build/con_ecu < tools/consoles/scenarios/Z04_R_drive.txt  (ECU 콘솔 전용, 주행 모델 drive·pedal)
+# 원본 설명의 '빨간색 표시'는 REAL SIM 화면 이야기다 (이 화면에서는 '#@' 줄이 설명 줄로 보임).
+# 주행 모델은 ECU 콘솔의 drive·pedal이고 규칙은 REAL SIM과 같다 (50ms마다 진행, ign·gear는 정지 상태에서만, 거부되면 '✘ 거부')
+
+# Z04 주행(R) 시연: R1 → R2 → R3 → R4 → R5
+# '#@' 줄은 지금 검증하는 요구사항이다. 시뮬레이터 이벤트 로그에 빨간색으로 표시된다.
+# 시작 상태: 시동 OFF, 기어 P, 속도 0, 조도 30000, 강우 0%, 스위치 OFF, 주행 모델 OFF(속도 직접 입력)
+# 시연 문서에 시간이 정해진 구간은 그대로 두고, 시간이 없는 구간은 단계 사이에 1~2초 대기를 넣었다.
+
+# ===== R 주행 (가속 보통 +10, 풀 +25, 브레이크 -40, 타력 -5 km/h/s) =====
+drive on
+
+#@ R1 — 시동 OFF면 안 움직임, 시동은 정지 상태에서만 켜고 끔
+tc Z04-R1 | R1 | 시연 시나리오 | REAL SIM Z04_R_drive R1 구간 | 시동 OFF면 안 움직임, 시동은 정지 상태에서만 켜고 끔
+# 1. 시동 ON, 기어 D
+ign on
+t 1
+gear d
+t 1
+# 시동 OFF 후 가속
+ign off
+t 1
+pedal 1 0
+t 2
+# 가속해도 속도 0
+e speed 0
+pedal 0 0
+t 1
+# 2. 시동 ON, 속도 30까지 가속
+ign on
+t 1
+pedal 2 0
+t 1.2
+pedal 0 0
+e speed 30
+# 주행 중 시동 OFF 시도
+ign off
+# 무시되고 ON 유지
+e ign on
+t 1
+# 3. 브레이크로 정지
+pedal 0 1
+t 1.5
+e speed 0
+# 정지 후 시동 OFF
+ign off
+# 시동이 꺼짐
+e ign off
+t 2
+
+#@ R2 — 기어 변경은 속도 0에서만
+tc Z04-R2 | R2 | 시연 시나리오 | REAL SIM Z04_R_drive R2 구간 | 기어 변경은 속도 0에서만
+ign on
+t 1
+# 기어 D로 속도 30까지 가속
+pedal 2 0
+t 1.2
+pedal 0 0
+e speed 30
+gear r
+# 주행 중: D 그대로
+e gear d
+t 0.5
+gear n
+e gear d
+t 0.5
+gear p
+e gear d
+t 0.5
+# 브레이크로 정지
+pedal 0 1
+t 1.5
+e speed 0
+gear r
+# 속도 0: R로 바뀜
+e gear r
+# 다시 브레이크로 정지 상태
+t 2
+
+#@ R3 — D 전진, R 후진, P·N 정지
+tc Z04-R3 | R3 | 시연 시나리오 | REAL SIM Z04_R_drive R3 구간 | D 전진, R 후진, P·N 정지
+gear p
+t 1
+# P에서 가속 1초
+pedal 1 0
+t 1
+# P: 속도 0
+e speed 0
+# N에서 가속 1초
+gear n
+t 1
+# N: 속도 0
+e speed 0
+# D에서 가속 1초
+gear d
+t 1
+# D: 전진 속도 증가
+e speed 10
+# 브레이크로 정지
+pedal 0 1
+t 1
+e speed 0
+# R에서 가속 1초
+gear r
+t 1
+pedal 1 0
+t 1
+# R: 후진 속도 증가
+e speed 10
+# 브레이크로 정지
+pedal 0 1
+t 1
+e speed 0
+t 2
+
+#@ R4 — 브레이크 감속, 관성 감속, 브레이크 우선
+tc Z04-R4 | R4 | 시연 시나리오 | REAL SIM Z04_R_drive R4 구간 | 브레이크 감속, 관성 감속, 브레이크 우선
+gear d
+t 1
+# 기어 D, 속도 60까지 가속
+pedal 2 0
+t 2.4
+e speed 60
+# 1. 가속·브레이크 모두 뗌 (2초)
+pedal 0 0
+t 2
+# 천천히 줄어듦: 60 → 50 (-5 km/h/s)
+e speed 50
+# 2. 가속과 브레이크 동시에 (0.5초)
+pedal 1 1
+t 0.5
+# 가속을 밟고 있어도 줄어듦: 50 → 30 (-40 km/h/s)
+e speed 30
+# 3. 브레이크만, 정지까지
+pedal 0 1
+t 0.75
+# 1보다 빠르게 줄어 0에서 멈춤
+e speed 0
+t 2
+# 정지 후에도 밟고 있어도 후진·음수 없음
+e speed 0
+e gear d
+t 2
+
+#@ R5 — 최고 속도와 가속 특성
+tc Z04-R5 | R5 | 시연 시나리오 | REAL SIM Z04_R_drive R5 구간 | 최고 속도와 가속 특성
+# 기어 D에서 풀 가속
+pedal 2 0
+t 3.95
+# 0 → 100 km/h: 3.95초에 98.75
+e speed 99
+t 0.05
+# 4.00초에 100 도달 (+25 km/h/s)
+e speed 100
+t 6
+# 전진 최고 250
+e speed 250
+t 1
+# 1초 유지: 더 오르지 않음
+e speed 250
+# 브레이크
+pedal 0 1
+t 1
+# 브레이크 감속률 -40 km/h/s
+e speed 210
+t 5.25
+e speed 0
+t 1
+# 기어 R에서 풀 가속
+gear r
+t 1
+pedal 2 0
+t 0.8
+# 후진 최고 20
+e speed 20
+t 1
+# 1초 유지: 더 오르지 않음
+e speed 20
+# 다시 브레이크
+pedal 0 1
+t 0.5
+e speed 0
+t 1
+pedal 0 0
+t 1
+gear p
+t 1
+ign off
