@@ -4,7 +4,8 @@
 요구사항의 근거는 고객 사양서 **VBC-SRS-001 v1.0**(`docs/spec/VBC-SRS-001_v1.0.pdf`)입니다.
 판단은 전부 C 코어가 하고, 화면은 그 결과를 그리기만 합니다.
 
-![시뮬레이터 화면: 밤, 비 75%, 50 km/h, 뒷문 열림](docs/images/simulator.png)
+<img width="2828" height="1436" alt="image" src="https://github.com/user-attachments/assets/7003922b-d677-4a02-bb28-dd5e859f2903" />
+
 
 ## 팀
 | 이름 | GitHub | 담당 |
