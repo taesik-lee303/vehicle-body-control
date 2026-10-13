@@ -24,7 +24,7 @@
 - AI가 틀린 곳과 바로잡은 과정도 기록한다 (발표 항목 4).
 
 ## 참고 지식 (`docs/ref/`, 필요할 때만 읽는다)
-요구사항의 근거는 사양서이고, 아래는 설명·테스트 설계용 배경이다. 사양서와 다르면 사양서가 맞다. 색인: `docs/ref/README.md`.
+요구사항의 근거는 사양서이고, 아래는 설명·테스트 설계용 배경이다. 사양서와 다르면 사양서가 맞다. 색인: `docs/ref/README.md`. 팀원용 사용법: `docs/claude-code-guide.md`.
 - 테스트 설계(동치분할, 경계값 3-value, 결정표, MC/DC), TC 양식, 리뷰·결함 기록: `docs/ref/sw-testing.md`
 - C2~C4의 통신 개념(주기 송신, 수신 timeout, 유효성), 입력 신호 DBC풍 정의(제안): `docs/ref/vehicle-comm.md`
 - 안전 우선 규칙(L5, W5, D1, C4)의 이유, HAZOP/ASIL: `docs/ref/functional-safety.md`

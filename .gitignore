@@ -9,3 +9,4 @@ venv/
 .claude/settings.local.json
 !docs/spec/*.pdf
 build/
+CLAUDE.local.md
