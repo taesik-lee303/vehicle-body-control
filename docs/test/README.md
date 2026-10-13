@@ -132,3 +132,18 @@ e lock on
 - **MC/DC**(p.323): 조건이 여럿인 판단에서 조건 하나만 바꿔 결과가 바뀌는지
 
 찾은 TC는 `tools/consoles/tc/<모듈>.txt`에 추가하고 `make tc`로 결과 문서에 반영합니다. 사양서와 다르게 동작하면 결함으로, 사양서에 없는 동작이면 질의 후보로 기록합니다.
+
+## 9. 화면으로 실행: BCU system 구성도 (`make sim-ecu`)
+같은 콘솔 엔진(modcon)을 WebAssembly로 돌려 입력 → VBC → SWC 4개 → 출력 ECU를 그림으로 봅니다. 판정은 모두 C가 하고, 화면은 state 값을 그대로 그립니다 (spec `docs/superpowers/specs/2026-10-13-ecu-sim-design.md` 4장).
+```bash
+source ~/emsdk/emsdk_env.sh   # emcc (sim/build/ecu.js 빌드용)
+make sim-ecu                  # 브라우저에서 http://localhost:8080/sim/ecu.html
+```
+- **상단 바**: 콘솔(ECU / 도어 / 계기판 / 조명 / 와이퍼), 시나리오(`(수동)` 또는 그 콘솔의 `tools/consoles/tc/<콘솔>.txt`), ▶ ■ ⏭, 배속, 시각, 진행 중인 TC, `PASS / FAIL`(확인 건수).
+- **▶**: TC 파일이면 처음 상태에서 줄 단위로 재생합니다. `t <초>`만 벽시계 × 배속으로 나눠 진행하고, 흘린 시간의 합은 `t` 값과 같아 판정 시각이 터미널과 같습니다. `(수동)`이면 시간만 흐릅니다.
+- **■** 정지(시각 멈춤), **⏭** 재생 중이면 다음 줄, 멈춰 있으면 판단 주기 하나(`period step`, 기본 1ms).
+- **입력 패널**: 조작이 콘솔 명령(`speed 15`, `cut lux`, `lock on`)으로 바뀌어 실행되고 로그에 `> 명령`으로 남습니다. 3절 명령과 같은 경로입니다.
+- **구성도**: 입력 화살표 라벨은 VBC가 받은 값(`rx`), 끊긴 입력은 점선 회색, 수신 중단·센서 고장 판정이 참이면 빨강. VBC → SWC 화살표는 그 SWC가 읽는 ctx 필드, SWC → ECU 화살표는 출력 값. 값이 바뀐 화살표는 잠깐 깜박입니다.
+- **URL**: `sim/ecu.html?console=ecu&tc=1&speed=10` → ECU 콘솔 TC를 10배속으로 바로 재생 (발표용).
+
+터미널 결과와 화면 재생 결과가 같은지는 `make wasm-check`로 확인합니다.

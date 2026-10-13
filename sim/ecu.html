@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ECU 테스트 시뮬레이터 — BCU system 구성도</title>
+<link rel="stylesheet" href="css/ecu.css">
+</head>
+<body>
+<header id="bar">
+  <label>콘솔 <select id="console"></select></label>
+  <label>시나리오 <select id="scenario"></select></label>
+  <span class="btns">
+    <button id="play" title="재생 (수동이면 시간 흐름 시작)">▶</button><button id="stop" title="정지 (시각 멈춤)">■</button><button id="step" title="재생 중: 다음 줄 / 멈춤: 판단 주기 하나">⏭</button>
+  </span>
+  <label>배속 <select id="rate"></select></label>
+  <span class="spacer"></span>
+  <span id="clock">t = 0.000 s</span>
+  <span id="tc-id"></span>
+  <span id="score">PASS 0 / FAIL 0</span>
+</header>
+
+<aside id="panel"></aside>
+
+<main id="stage">
+  <svg id="diagram" role="img" aria-label="BCU system 구성도: 입력 신호 → VBC → SWC 4개 → 출력 ECU"></svg>
+</main>
+
+<section id="log-panel">
+  <header><strong>이벤트 로그</strong><button id="log-clear">지우기</button></header>
+  <div id="log"></div>
+</section>
+
+<div id="loading">ECU 엔진 불러오는 중…</div>
+
+<script type="module" src="js/ecu/main.js"></script>
+</body>
+</html>

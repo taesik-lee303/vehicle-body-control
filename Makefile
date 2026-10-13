@@ -5,6 +5,7 @@
 # make sim       → wasm 빌드 후 http://localhost:8080/sim/ (저장소 루트 서빙, SIM_PORT로 변경)
 # make wasm-ecu  → sim/build/ecu.js (ECU 시뮬레이터 엔진, emcc 필요)
 # make wasm-check → 터미널 콘솔 = WASM 엔진 출력 동일성 확인 (node 필요)
+# make sim-ecu   → wasm-ecu 후 http://localhost:8080/sim/ecu.html (BCU system 구성도, 저장소 루트 서빙)
 # make consoles  → 모듈별 대화형 테스트 콘솔 4개 빌드 (build/con_doors 등)
 # make con-doors / con-dashboard / con-lighting / con-wipers → 해당 콘솔 실행
 # make tc        → 모듈별 TC 전체 실행, 결과 문서 docs/test/tc-results.md 생성
@@ -21,7 +22,7 @@ HEADERS := $(wildcard src/*.h)
 TEST_SRCS := $(wildcard tests/test_*.c)
 TEST_BINS := $(TEST_SRCS:tests/%.c=$(BUILD)/%)
 
-.PHONY: all test run scenarios wasm sim consoles tc clean wasm-ecu wasm-check
+.PHONY: all test run scenarios wasm sim consoles tc clean wasm-ecu wasm-check sim-ecu
 
 all: $(BUILD)/vbc
 
@@ -96,6 +97,11 @@ $(ECU_OUT): $(ECU_SRCS) $(HEADERS) tools/consoles/modcon.h tools/consoles/consol
 	@command -v $(EMCC) >/dev/null || { echo "emcc가 없습니다: source ~/emsdk/emsdk_env.sh"; exit 1; }
 	mkdir -p sim/build
 	$(EMCC) $(CPPFLAGS) -Itools/consoles -std=c11 -DMODCON_NO_MAIN $(ECU_EMFLAGS) -o $@ $(ECU_SRCS)
+
+# BCU system 구성도 화면. TC 파일(tools/consoles/tc)을 fetch로 읽으므로 저장소 루트를 서빙한다
+sim-ecu: wasm-ecu
+	@echo "브라우저에서 http://localhost:$(SIM_PORT)/sim/ecu.html (종료: Ctrl+C)"
+	python3 -m http.server $(SIM_PORT)
 
 # 터미널 콘솔 출력과 WASM 엔진(재생기) 출력이 같은지 확인
 wasm-check: wasm-ecu consoles
