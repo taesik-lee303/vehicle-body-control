@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include <errno.h>
 #include <limits.h>
+#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -187,6 +188,17 @@ static void send(ModCon *m, vbc_ms_t t, unsigned mask)
 static const char *on_off(bool b) { return b ? "켜짐" : "꺼짐"; }
 static const char *yes_no(bool b) { return b ? "예" : "아니오"; }
 
+/* 입력 오류 표시 ('!' 줄). 이번 명령이 오류였음을 기록해 modcon_exec가 1을 돌려주게 한다 */
+static void oops(ModCon *m, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    vprintf(fmt, ap);
+    va_end(ap);
+    m->err = true;
+}
+
 static void change(const ModCon *m, const char *label, const char *from, const char *to)
 {
     printf("  → [%3u.%03us] %s: %s → %s\n", (unsigned)(m->now / 1000), (unsigned)(m->now % 1000), label, from, to);
@@ -248,7 +260,7 @@ static void step_now(ModCon *m)
 }
 
 /* ms만큼 진행: step 주기마다 판단, 자동 재송신이면 send 주기의 배수 시각에 끊지 않은 신호를 보낸다 */
-static void advance(ModCon *m, long ms)
+int modcon_advance(ModCon *m, long ms)
 {
     vbc_ms_t end = m->now + (vbc_ms_t)ms;
     vbc_ms_t sp = m->step_period_ms ? m->step_period_ms : 1;
@@ -265,8 +277,7 @@ static void advance(ModCon *m, long ms)
         changes += step(m);
     }
     m->now = end; /* step 주기로 나누어떨어지지 않는 나머지 (판단은 다음 step에서) */
-    if (changes == 0)
-        printf("  → %ld.%03ld초 동안 변화 없음\n", ms / 1000, ms % 1000);
+    return changes;
 }
 
 static void reset(ModCon *m)
@@ -414,7 +425,7 @@ static void cmd_expect(ModCon *m, const char *item, const char *want)
     const char *const *w;
 
     if (!item || !want || !item_value(m, item, &v, &w, &nw)) {
-        printf("  ! 사용법: e <항목> <값>  (h 참고)\n");
+        oops(m, "  ! 사용법: e <항목> <값>  (h 참고)\n");
         return;
     }
     int expected = -1;
@@ -423,7 +434,7 @@ static void cmd_expect(ModCon *m, const char *item, const char *want)
     if (expected < 0 && (ieq(want, "on") || ieq(want, "yes"))) expected = 1;
     if (expected < 0 && (ieq(want, "off") || ieq(want, "no"))) expected = 0;
     if (expected < 0) {
-        printf("  ! %s의 값을 알 수 없습니다: %s\n", item, want);
+        oops(m, "  ! %s의 값을 알 수 없습니다: %s\n", item, want);
         return;
     }
     m->checks++;
@@ -444,7 +455,7 @@ static void cmd_observe(ModCon *m, const char *item)
     const char *const *w;
 
     if (!item || !item_value(m, item, &v, &w, &nw)) {
-        printf("  ! 사용법: obs <항목>  (h 참고)\n");
+        oops(m, "  ! 사용법: obs <항목>  (h 참고)\n");
         return;
     }
     m->observations++;
@@ -490,7 +501,7 @@ static void set_state(ModCon *m, const char *arg)
     int32_t v;
 
     if (!arg || !parse_value(arg, words, &v) || (v != 0 && v != 1)) {
-        printf("  ! %s on|off (0·off %s, 1·on %s). 모듈 상태라 0/1만 됩니다\n", m->state_cmd, m->state_words[0],
+        oops(m, "  ! %s on|off (0·off %s, 1·on %s). 모듈 상태라 0/1만 됩니다\n", m->state_cmd, m->state_words[0],
                m->state_words[1]);
         return;
     }
@@ -506,11 +517,15 @@ static void ask_and_set(ModCon *m, SigKey k)
     char buf[128];
     int32_t v;
 
+    if (!m->interactive) {
+        oops(m, "  ! %s: 값을 함께 입력하세요 (h 도움말)\n", SIGS[k].cmd);
+        return;
+    }
     printf("  %s 코드: %s\n", SIGS[k].label, SIGS[k].codes);
     if (!read_line("  값 (아무 정수도 됨)> ", buf, sizeof buf) || !*trim(buf))
         return;
     if (!parse_value(trim(buf), SIGS[k].alias, &v)) {
-        printf("  ! 정수(int32) 또는 이름(%s)을 입력하세요. 소수·글자는 이 신호의 형식(정수)으로 보낼 수 없습니다\n", SIGS[k].codes);
+        oops(m, "  ! 정수(int32) 또는 이름(%s)을 입력하세요. 소수·글자는 이 신호의 형식(정수)으로 보낼 수 없습니다\n", SIGS[k].codes);
         return;
     }
     set_signal(m, k, v);
@@ -542,17 +557,19 @@ static bool exec_line(ModCon *m, char *line)
         char tb[64];
         long ms;
         if (!a1) {
+            if (!m->interactive) { oops(m, "  ! %s: 값을 함께 입력하세요 (h 도움말)\n", cmd); return true; }
             if (!read_line("  몇 초 진행할까요? (1ms 단위, 예: 0.499, 1, 2.9)> ", tb, sizeof tb))
                 return false;
             a1 = trim(tb);
         }
-        if (!parse_seconds(a1, &ms)) { printf("  ! 0.001초 이상, 600초 이하로 입력하세요\n"); return true; }
-        advance(m, ms);
+        if (!parse_seconds(a1, &ms)) { oops(m, "  ! 0.001초 이상, 600초 이하로 입력하세요\n"); return true; }
+        if (modcon_advance(m, ms) == 0)
+            printf("  → %ld.%03ld초 동안 변화 없음\n", ms / 1000, ms % 1000);
         return true;
     }
     if (ieq(cmd, "cut") || ieq(cmd, "resume") || ieq(cmd, "send")) {
         unsigned b = parse_periodic(a1);
-        if (!b) { printf("  ! %s speed|gear|ign|lux|rain|vehicle|all\n", cmd); return true; }
+        if (!b) { oops(m, "  ! %s speed|gear|ign|lux|rain|vehicle|all\n", cmd); return true; }
         if (ieq(cmd, "cut")) {
             m->cut |= b;
             printf("  송신 끊음: %s (마지막 수신 후 0.5초가 지나야 판정이 바뀝니다)\n", a1);
@@ -572,7 +589,7 @@ static bool exec_line(ModCon *m, char *line)
             m->auto_send = ieq(a1, "on");
             printf("  자동 재송신 %s\n", m->auto_send ? "켬" : "끔");
         } else {
-            printf("  ! auto on|off\n");
+            oops(m, "  ! auto on|off\n");
         }
         return true;
     }
@@ -582,7 +599,7 @@ static bool exec_line(ModCon *m, char *line)
             if (ieq(a1, "step")) m->step_period_ms = (vbc_ms_t)v; else m->send_period_ms = (vbc_ms_t)v;
             printf("  %s 주기 %dms\n", ieq(a1, "step") ? "판단" : "자동 송신", (int)v);
         } else {
-            printf("  ! period step|send <1~10000 ms>\n");
+            oops(m, "  ! period step|send <1~10000 ms>\n");
         }
         return true;
     }
@@ -590,6 +607,7 @@ static bool exec_line(ModCon *m, char *line)
     if (m->state_cmd && ieq(cmd, m->state_cmd)) {
         char sb[64];
         if (!a1) {
+            if (!m->interactive) { oops(m, "  ! %s: 값을 함께 입력하세요 (h 도움말)\n", cmd); return true; }
             if (!read_line("  on(1) 또는 off(0)> ", sb, sizeof sb))
                 return false;
             a1 = trim(sb);
@@ -603,7 +621,7 @@ static bool exec_line(ModCon *m, char *line)
         int32_t v;
         if (!a1) { ask_and_set(m, (SigKey)k); return true; }
         if (!parse_value(a1, SIGS[k].alias, &v)) {
-            printf("  ! %s: 정수(int32) 또는 이름(%s). 소수·글자는 신호 형식(정수)으로 보낼 수 없습니다\n", SIGS[k].cmd, SIGS[k].codes);
+            oops(m, "  ! %s: 정수(int32) 또는 이름(%s). 소수·글자는 신호 형식(정수)으로 보낼 수 없습니다\n", SIGS[k].cmd, SIGS[k].codes);
             return true;
         }
         set_signal(m, (SigKey)k, v);
@@ -618,31 +636,59 @@ static bool exec_line(ModCon *m, char *line)
             if ((m->show & SIGS[i].show_bit) && ++no == n) { ask_and_set(m, (SigKey)i); return true; }
         if (m->state_cmd && ++no == n) {
             char sb[64];
+            if (!m->interactive) { oops(m, "  ! %s: 값을 함께 입력하세요 (h 도움말)\n", cmd); return true; }
             if (read_line("  on(1) 또는 off(0)> ", sb, sizeof sb))
                 set_state(m, trim(sb));
             return true;
         }
     }
-    printf("  ! 알 수 없는 입력: %s  (h 도움말)\n", cmd);
+    oops(m, "  ! 알 수 없는 입력: %s  (h 도움말)\n", cmd);
     return true;
+}
+
+void modcon_start(ModCon *m)
+{
+    m->tc[0] = '\0';
+    m->tc_count = m->tc_failed = m->checks = m->failures = m->observations = 0;
+    m->tc_has_fail = false;
+    reset(m);
+}
+
+/* 한 줄 실행: 0 정상, 1 오류('!' 출력), 2 quit */
+int modcon_exec(ModCon *m, const char *line)
+{
+    char buf[1024];
+
+    snprintf(buf, sizeof buf, "%s", line);
+    m->err = false;
+    if (!exec_line(m, buf))
+        return 2;
+    return m->err ? 1 : 0;
+}
+
+/* 진행 중인 TC를 닫고 요약 줄을 낸다. FAIL이 있으면 1 */
+int modcon_finish(ModCon *m)
+{
+    tc_close(m);
+    printf("\n== %s 결과: TC %d개 (FAIL 있는 TC %d개), 확인 %d건 중 FAIL %d건, 관찰 %d건\n", m->title, m->tc_count,
+           m->tc_failed, m->checks, m->failures, m->observations);
+    return m->failures ? 1 : 0;
 }
 
 int modcon_run(ModCon *m)
 {
     char buf[1024];
 
-    reset(m);
+    m->interactive = true;
+    modcon_start(m);
     printf("%s 테스트 콘솔 (신호 주입기)\n  %s\n  h: 명령 목록\n", m->title, m->about);
     for (;;) {
         if (isatty(0))
             print_status(m);
         if (!read_line(isatty(0) ? "선택> " : "> ", buf, sizeof buf))
             break;
-        if (!exec_line(m, buf))
+        if (modcon_exec(m, buf) == 2)
             break;
     }
-    tc_close(m);
-    printf("\n== %s 결과: TC %d개 (FAIL 있는 TC %d개), 확인 %d건 중 FAIL %d건, 관찰 %d건\n", m->title, m->tc_count,
-           m->tc_failed, m->checks, m->failures, m->observations);
-    return m->failures ? 1 : 0;
+    return modcon_finish(m);
 }

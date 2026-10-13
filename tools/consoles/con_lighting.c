@@ -4,6 +4,7 @@
  */
 
 #include "lighting.h"
+#include "consoles.h"
 #include "modcon.h"
 
 static LightingState st;
@@ -11,9 +12,11 @@ static LightingState st;
 static void mod_init(ModCon *m) { (void)m; lighting_init(&st); }
 static void mod_step(ModCon *m) { lighting_step(&st, &m->ctx, (WiperLevel)m->wiper_level, &m->out); }
 
-int main(void)
+void con_lighting_define(ModCon *m)
 {
-    ModCon m = {
+    *m = (ModCon){
+        .name = "lighting",
+        .swc = SWC_LIGHTING,
         .title = "조명 (L1~L6)",
         .about = "우선순위 L1 시동 OFF 소등 > L5 조도 고장 점등·표시 > L4 스위치 ON/OFF > L6 와이퍼 10초 작동 > "
                  "L2 1000 lux 미만 1초 점등 · L3 1500 lux 초과 3초 소등(그 사이는 직전 유지)",
@@ -24,5 +27,13 @@ int main(void)
         .start_ign = 0,
         .start_gear = GEAR_P,
     };
+}
+
+#ifndef MODCON_NO_MAIN
+int main(void)
+{
+    ModCon m;
+    con_lighting_define(&m);
     return modcon_run(&m);
 }
+#endif

@@ -42,10 +42,15 @@ enum {
     OUT_WARNING = 1 << 5
 };
 
+/* 콘솔이 다루는 모듈 (ModCon.swc) */
+enum { SWC_LIGHTING = 1 << 0, SWC_WIPER = 1 << 1, SWC_DOORS = 1 << 2, SWC_DASHBOARD = 1 << 3 };
+
 typedef struct ModCon ModCon;
 
 struct ModCon {
     /* 콘솔이 정하는 것 */
+    const char *name;  /* "doors" 등. TC 파일명·JSON용 */
+    unsigned swc;      /* SWC_* */
     const char *title;
     const char *about;
     unsigned show;     /* SIG_* */
@@ -71,6 +76,9 @@ struct ModCon {
     vbc_ms_t send_period_ms; /* 기본 50 (사양서 3.1: 0.5초보다 짧게) */
     vbc_ms_t step_period_ms; /* 기본 1 (1ms마다 판단) */
 
+    bool interactive; /* modcon_run이 켬: 인자 없으면 되묻기. 꺼져 있으면 오류로 처리 */
+    bool err;         /* 이번 명령에서 '!' 오류가 났는지 */
+
     VbcInputs in;
     VbcContext ctx;
     VbcOutputs out;
@@ -82,7 +90,15 @@ struct ModCon {
     bool tc_has_fail;
 };
 
-/* 시작 상태로 두고 0초에 첫 입력을 보낸 뒤 대화형으로 돈다. expect가 하나라도 틀리면 1을 돌려준다 */
+/* 카운터를 0으로 하고 시작 상태로 둔다 (C5, 0초에 첫 입력 송신) */
+void modcon_start(ModCon *m);
+/* 명령 한 줄 실행. 0 정상, 1 오류('!' 출력), 2 quit */
+int modcon_exec(ModCon *m, const char *line);
+/* ms만큼 진행. 바뀐 출력·판정 수를 돌려준다 ("변화 없음"은 출력하지 않는다) */
+int modcon_advance(ModCon *m, long ms);
+/* 진행 중인 TC를 닫고 요약 줄을 낸다. FAIL이 있으면 1 */
+int modcon_finish(ModCon *m);
+/* 시작 후 터미널에서 대화형으로 돈다. expect가 하나라도 틀리면 1을 돌려준다 */
 int modcon_run(ModCon *m);
 
 #endif /* MODCON_H */

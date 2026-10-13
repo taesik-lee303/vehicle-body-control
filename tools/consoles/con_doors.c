@@ -5,6 +5,7 @@
  */
 
 #include "doors.h"
+#include "consoles.h"
 #include "modcon.h"
 
 static DoorState st;
@@ -14,9 +15,11 @@ static void mod_step(ModCon *m) { doors_step(&st, &m->ctx, &m->out); }
 static bool get_lock(ModCon *m) { (void)m; return st.locked; }
 static void set_lock(ModCon *m, bool v) { st.locked = v; m->out.door_locked = v; }
 
-int main(void)
+void con_doors_define(ModCon *m)
 {
-    ModCon m = {
+    *m = (ModCon){
+        .name = "doors",
+        .swc = SWC_DOORS,
         .title = "도어·잠금 (D1~D3)",
         .about = "D1 수신 중단이면 그대로 → D2 시동 OFF 또는 기어 P면 해제 → D3 유효한 속도 15 km/h 이상이면 잠금 → 그 외 직전 유지",
         .show = SIG_IGN | SIG_GEAR | SIG_SPEED,
@@ -31,5 +34,13 @@ int main(void)
         .mod_get_state = get_lock,
         .mod_set_state = set_lock,
     };
+}
+
+#ifndef MODCON_NO_MAIN
+int main(void)
+{
+    ModCon m;
+    con_doors_define(&m);
     return modcon_run(&m);
 }
+#endif
