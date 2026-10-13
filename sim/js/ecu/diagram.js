@@ -12,7 +12,7 @@ export const SWC_FIELDS = {
 
 const NS = 'http://www.w3.org/2000/svg';
 const PULSE_MS = 400; // 라벨이 바뀐 화살표를 깜박이는 시간 (수동·일시정지)
-const FLOW_STAGE_MS = 500; // 시나리오 재생 중 데이터 흐름 한 단계 (벽시계, 배속과 무관): 입력 → VBC → SWC → ECU
+export const FLOW_STAGE_MS = 500; // 시나리오 재생 중 데이터 흐름 한 단계 (벽시계, 배속과 무관): 입력 → VBC → SWC → ECU
 
 // 코드 → 이름 (modcon.c 별칭과 같은 순서). 이름 배열 밖은 C의 name_or처럼 "INVALID"
 const IGN = ['off', 'on'];

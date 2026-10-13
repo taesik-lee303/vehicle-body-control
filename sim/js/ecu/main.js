@@ -2,7 +2,7 @@
 // 화면은 판단하지 않는다: 명령 문자열을 엔진(modcon WASM)에 보내고, state JSON을 그린다.
 import { createEngine } from './engine.js';
 import { TcRunner } from './runner.js';
-import { createDiagram } from './diagram.js';
+import { createDiagram, FLOW_STAGE_MS } from './diagram.js';
 import { createPanel } from './panel.js';
 
 const CONSOLES = [
@@ -15,6 +15,7 @@ const CONSOLES = [
 const RATES = [0.25, 0.5, 1, 2, 5, 10];
 const MANUAL = ''; // 시나리오 select의 (수동)
 const MAX_FRAME_MS = 100; // 탭이 멈췄다 돌아와도 시간을 한꺼번에 몰아치지 않게 (sim/js/main.js와 같음)
+const FLOW_TAIL_MS = 3 * FLOW_STAGE_MS; // 시나리오가 끝난 뒤에도 흐름 표시를 유지하는 시간 (입력 → SWC → ECU 세 단계가 끝나도록)
 
 const $ = (id) => document.getElementById(id);
 
@@ -64,9 +65,11 @@ try {
 
 const runner = new TcRunner(engine, log);
 // playing: 시간이 흐르는 중. tc: TC를 불러 둔 상태 (일시정지해도 위치 유지, ■나 TC 끝에서만 해제)
-const sim = { playing: false, rate: 1, carry: 0, console: 'ecu', tc: false };
+// flowTail: 재생으로 끝난 시나리오의 흐름 표시를 이 벽시계 시각까지 유지 (다른 조작을 하면 0)
+const sim = { playing: false, rate: 1, carry: 0, console: 'ecu', tc: false, flowTail: 0 };
 
 function exec(cmd) {
+  sim.flowTail = 0; // 입력 패널 조작은 지금처럼 깜박임으로 보인다
   log('> ' + cmd, 'cmd');
   return engine.exec(cmd);
 }
@@ -97,6 +100,7 @@ function fillScenarios() {
 // ▶/∥ 한 버튼: 흐르는 중이면 ∥(일시정지), 멈춰 있으면 ▶(재생·재개)
 function setPlaying(on) {
   sim.playing = on;
+  sim.flowTail = 0;
   sim.carry = 0;
   playBtn.textContent = on ? '∥' : '▶';
   playBtn.title = on ? '일시정지 (시나리오 위치 유지)' : '재생 (수동이면 시간 흐름 시작, 일시정지 중이면 이어서)';
@@ -169,6 +173,7 @@ function stop() {
 // ⏭: 시나리오를 불러 두었으면 다음 줄(진행 중인 t가 있으면 그 t를 끝까지), 아니면 판단 주기 하나(step_ms).
 // 일시정지 중 ⏭로 1ms짜리 TC 시점(TC-ECU-L6-02, C4-02 등)을 한 줄씩 본다. 누를 때마다 바로 다시 그린다
 function step() {
+  sim.flowTail = 0;
   if (runner.active) runner.next();
   else engine.advance(engine.state().step_ms || 1);
   draw();
@@ -234,14 +239,18 @@ if (tcParam && tcParam !== '0') {
 
 // 상태를 읽어 그린다. TC가 끝났으면 시각을 멈춰 끝 상태를 보여 준다
 function draw() {
+  const now = performance.now();
+  // 시나리오가 흐르는 중에만 데이터 흐름 표시 (수동·일시정지 ⏭는 지금처럼 깜박임).
+  // 끝나기 전에 정한다: 마지막 t·남은 줄·파일 끝이 한 프레임에 실행되어도 그 변화는 흐름으로 보인다
+  const playing = sim.tc && sim.playing;
   if (sim.tc && !runner.active) {
     sim.tc = false;
     setPlaying(false);
+    if (playing) sim.flowTail = now + FLOW_TAIL_MS; // 진행 중인 흐름(SWC·ECU 단계)이 끝까지 가도록
   }
   const st = engine.state();
   renderBar(st);
-  // 시나리오가 흐르는 중에만 데이터 흐름 표시 (수동·일시정지 ⏭는 지금처럼 깜박임)
-  diagram.render(st, { flow: runner.active && sim.playing });
+  diagram.render(st, { flow: playing || now < sim.flowTail });
   panel.render(st);
 }
 

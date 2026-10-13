@@ -89,13 +89,15 @@ body { display: grid; grid-template-columns: 250px 1fr; grid-template-rows: auto
 @keyframes pulse-line { 0% { stroke: #fff; stroke-width: 5; } }
 @keyframes pulse-text { 0% { fill: #fff; } }
 /* 시나리오 재생 중 데이터 흐름 (flowing): 깜박임 대신 화살표를 따라 점이 흘러간다. 켜고 끌 때는 서서히.
-   애니메이션은 늘 돌고 투명도만 바뀌므로 흐름이 이어질 때 처음부터 다시 시작하지 않는다 */
+   재생 중(flow-mode)에는 애니메이션이 늘 돌고 투명도만 바뀌므로 흐름이 이어질 때 처음부터 다시 시작하지 않는다.
+   수동·일시정지에서는 보이지 않는 점선을 움직이지 않는다 */
 #diagram .arrow .flow { stroke: #a8d4ff; stroke-width: 4; stroke-linecap: round; stroke-dasharray: 2 18; opacity: 0;
-  pointer-events: none; transition: opacity 0.25s ease; animation: flow-march 0.3s linear infinite; }
+  pointer-events: none; transition: opacity 0.25s ease; }
+#diagram.flow-mode .arrow .flow { animation: flow-march 0.3s linear infinite; }
 #diagram .arrow.flowing .flow { opacity: 0.9; }
 #diagram .arrow.cut .flow, #diagram .arrow.idle .flow { opacity: 0; }
 @keyframes flow-march { to { stroke-dashoffset: -20; } }
-@media (prefers-reduced-motion: reduce) { #diagram .arrow .flow { animation: none; } }
+@media (prefers-reduced-motion: reduce) { #diagram.flow-mode .arrow .flow { animation: none; } }
 /* 시나리오 재생 중에는 ECU·고장등·화살표 색이 바로 바뀌지 않고 0.3초 동안 부드럽게 바뀐다 */
 #diagram.flow-mode .ecu, #diagram.flow-mode .ecu .body, #diagram.flow-mode .ecu .badge, #diagram.flow-mode .ecu .badge rect,
 #diagram.flow-mode .ecu .mode, #diagram.flow-mode .ecu .box-title, #diagram.flow-mode .lamp circle,
