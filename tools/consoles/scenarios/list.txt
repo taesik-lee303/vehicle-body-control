@@ -1,3 +1,5 @@
 Z01_L_lighting.txt
+Z02_W_wipers.txt
+Z03_D_doors.txt
 C4_rx_lost.txt
 L2_dark_turns_on.txt
