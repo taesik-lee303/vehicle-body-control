@@ -58,6 +58,7 @@ make con-ecu     # 대화형: BCU 전체 (SWC 4개 연동)
 
 `e`/`obs` 항목: 출력 `lock headlight luxlamp rainlamp`(on/off), `wiper`(stop/int/low/high), `warning`(none/door/lux/rain),
 판정 `rxlost ignon speedvalid luxfault rainfault ignvalid gearvalid doorvalid lightvalid wipervalid`(yes/no).
+`e`만: 입력한(보내는) 값 `ign`(on/off), `speed`(숫자). VBC가 받은 값이 아니라 명령으로 넣은 값이라 끊어도(cut) 그대로이며, REAL SIM `expect ign`·`expect speed`와 같습니다 (가져온 시연 시나리오용).
 
 화면의 `→ [0.500s] (판정) 수신 중단: 아니오 → 예`처럼 출력과 판정이 바뀐 순간이 1ms 단위로 찍힙니다.
 

@@ -374,6 +374,7 @@ static void help(const ModCon *m)
            "    obs <항목>          관찰만 기록 (사양서에 정해지지 않은 동작)\n"
            "      항목: lock headlight luxlamp rainlamp (on|off), wiper (stop|int|low|high), warning (none|door|lux|rain),\n"
            "            rxlost ignon speedvalid luxfault rainfault ignvalid gearvalid doorvalid lightvalid wipervalid (yes|no)\n"
+           "            ign (on|off), speed <km/h>: 입력한(보내는) 값 확인 (e만, REAL SIM expect ign·speed와 같음)\n"
            "    show                지금 상태,  r 처음 상태(C5)로,  q 종료\n"
            "  입력을 바꾸면 그 시각에 바로 판단하고, 바뀐 출력·판정을 '→'로 보여 줍니다. 다른 모듈은 실행되지 않습니다.\n");
 }
@@ -419,11 +420,44 @@ static const char *tc_label(const ModCon *m)
     return m->tc[0] ? m->tc : "-";
 }
 
+/* e ign / e speed: 입력한(보내는) 값 확인. REAL SIM expect ign·speed와 같은 값(panel.ignition·panel.speed =
+ * 명령으로 넣은 값, VBC가 받은 값이 아님)을 본다. 끊어도(cut) 입력한 값은 그대로다 */
+static void expect_input(ModCon *m, const char *item, const char *want)
+{
+    bool is_ign = ieq(item, "ign");
+    int32_t expected, actual = is_ign ? m->ign : m->speed;
+
+    if (is_ign ? !(ieq(want, "on") || ieq(want, "off")) : !parse_value(want, NO_ALIAS, &expected)) {
+        oops(m, is_ign ? "  ! ign의 값은 on|off입니다: %s\n" : "  ! speed의 값은 숫자입니다: %s\n", want);
+        return;
+    }
+    if (is_ign)
+        expected = ieq(want, "on");
+    m->checks++;
+    if (actual == expected) {
+        if (is_ign) printf("  ✔ PASS [%s] ign = %s  (%u.%03us)\n", tc_label(m), expected ? "on" : "off",
+                           (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
+        else printf("  ✔ PASS [%s] speed = %d  (%u.%03us)\n", tc_label(m), (int)expected,
+                    (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
+        return;
+    }
+    m->failures++;
+    m->tc_has_fail = true;
+    if (is_ign) printf("  ✘ FAIL [%s] ign: 기대 %s, 실제 %s  (%u.%03us)\n", tc_label(m), expected ? "on" : "off",
+                       actual == 0 ? "off" : actual == 1 ? "on" : "?", (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
+    else printf("  ✘ FAIL [%s] speed: 기대 %d, 실제 %d  (%u.%03us)\n", tc_label(m), (int)expected, (int)actual,
+                (unsigned)(m->now / 1000), (unsigned)(m->now % 1000));
+}
+
 static void cmd_expect(ModCon *m, const char *item, const char *want)
 {
     int v, nw;
     const char *const *w;
 
+    if (item && want && (ieq(item, "ign") || ieq(item, "speed"))) {
+        expect_input(m, item, want);
+        return;
+    }
     if (!item || !want || !item_value(m, item, &v, &w, &nw)) {
         oops(m, "  ! 사용법: e <항목> <값>  (h 참고)\n");
         return;
