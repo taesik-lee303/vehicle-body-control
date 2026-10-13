@@ -1,0 +1,79 @@
+# Z05 Stop & Go 시연 1: 정체 구간 (XS1·XS2·XS4·XS5·XS6·XS7)
+# '#@' 줄은 지금 검증하는 요구사항이다. 시뮬레이터 이벤트 로그에 빨간색으로 표시된다.
+# 장면: 능동로(편도 2차로, 경로 2340 m 지점). 내 차로에 앞차 3대가 줄지어 서고 가기를 되풀이하고, 옆 차로에도 차가 있다.
+#   앞차 3대는 늘 같은 속도·가감속으로 움직여 서로 간격(9.4 m)이 유지된다 (물체끼리는 서로 피하지 않으므로).
+# 시작 상태: 시동 OFF, 기어 P, 속도 0. 주행 모델 ON(운전 조작), 레이더·Stop & Go ON
+#! at 2340
+adas on
+wait 0.05                   # 화면이 자차 위치(2340 m)를 다시 알려 준 뒤에 물체를 놓는다 (adas on이 세계를 초기화하므로)
+drive on
+ign on
+gear d
+obj add car 15 same 25      # #1 선행 차량: 15 m 앞, 내 차로, 25 km/h (자차가 30 km/h로 다가가 따라붙음)
+obj add car 29 same 25      # #2 그 앞 차 (#1과 9.4 m 간격)
+obj add truck 43 same 25    # #3 맨 앞 트럭 (#2와 9.4 m 간격)
+obj add car 2 side 25       # #4 옆 차로 (지도에서는 왼쪽 차로)
+obj add car 20 side 25      # #5 옆 차로
+pedal 1 0                   # 3초 가속 → 30 km/h
+wait 3
+pedal 0 0
+
+#@ XS1·XS2 — 스위치 ON, SET: 지금 속도(30 km/h)로 작동
+sg on
+sg set
+expect sg active
+
+#@ XS4 — 선행 차량을 목표 거리(4 m + 1.5초 × 속도)로 따라감
+wait 10
+expect lead on
+expect leadx 10 20          # 선행 차량은 옆 차로 차가 아니라 내 차로 #1 (목표 거리 약 14 m)
+expect sg active
+
+#@ XS5 — 앞차들이 서면 선행 차량 뒤 4.0 ± 1.0 m에 서고 정지 유지
+obj 1 speed 0 2             # 앞차들이 −2 m/s²로 섬 (25 km/h → 약 3.5초)
+obj 2 speed 0 2
+obj 3 speed 0 2
+obj 4 speed 0 2
+obj 5 speed 0 2
+wait 7.5                    # 자차는 약 19.2초에 섬
+expect sg hold
+expect gap 3 5
+expect moving off
+
+#@ XS6 — 정지 3초 안에 앞차가 출발하면 스스로 다시 출발
+obj 1 speed 20 1.5          # 정지 약 1.3초 뒤 앞차들이 출발
+obj 2 speed 20 1.5
+obj 3 speed 20 1.5
+obj 4 speed 20 1.5
+obj 5 speed 20 1.5
+wait 1.5
+expect sg active
+expect moving on
+wait 8
+
+#@ XS7 — 정지가 3초를 넘으면 재출발 대기: 앞차가 떠나도 스스로 안 가고 "출발 가능" 알림, RES로 출발
+obj 1 speed 0 2
+obj 2 speed 0 2
+obj 3 speed 0 2
+obj 4 speed 0 2
+obj 5 speed 0 2
+wait 6
+expect sg hold
+expect gap 3 5
+wait 4                      # 정지 3초 넘음
+expect sg wait
+obj 1 speed 20 1.5
+obj 2 speed 20 1.5
+obj 3 speed 20 1.5
+obj 4 speed 20 1.5
+obj 5 speed 20 1.5
+wait 2
+expect sg wait              # 스스로 출발하지 않음
+expect sgalert go           # 출발 가능 알림
+expect moving off
+sg res                      # 운전자가 RES
+wait 1
+expect sg active
+expect moving on
+wait 6
+expect sgalert none

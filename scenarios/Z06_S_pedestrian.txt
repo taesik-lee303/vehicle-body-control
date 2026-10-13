@@ -1,0 +1,51 @@
+# Z06 Stop & Go 시연 2: 보행자가 갑자기 튀어나옴 (XS3·XM8·XM9·XS5·XS7)
+# '#@' 줄은 지금 검증하는 요구사항이다. 시뮬레이터 이벤트 로그에 빨간색으로 표시된다.
+# 장면: 능동로(편도 2차로, 경로 2340 m 지점). 앞차 없이 30 km/h로 가는데, 내 차로 가운데에서 오른쪽 4 m(지도: 오른쪽 보도,
+#   직선 도로: 옆 차로)에 서 있던 보행자가 자차가 28 m 앞까지 오면 2.0 m/s로 뛰어나와 내 차로 한가운데에서 멈칫한다.
+#   경로에 들어올 때 자차와 약 18 m, TTC 약 2초: 그대로 가면 부딪히고, Stop & Go 최대 감속(3.5 m/s²) 안에서 멈출 수 있는 시점이다.
+#   직선 도로에서는 급감속이라 운전자 개입 요청(XS12)이 잠깐 뜰 수 있다.
+#   보행자는 30 m 앞에 나타나(가려져 있다가 보이는 순간) 0.25초 뒤 뛰기 시작한다. 길가에 오래 서 있게 하면
+#   지도 도로의 꺾임 때문에 30 m보다 먼 곳에서 경로 안으로 잘못 잡힐 수 있어서 이렇게 했다.
+# 시작 상태: 시동 OFF, 기어 P, 속도 0. 주행 모델 ON(운전 조작), 레이더·Stop & Go ON
+#! at 2340
+adas on
+wait 0.05                   # 화면이 자차 위치(2340 m)를 다시 알려 준 뒤에 물체를 놓는다 (adas on이 세계를 초기화하므로)
+drive on
+ign on
+gear d
+pedal 1 0                   # 3초 가속 → 30 km/h
+wait 3
+pedal 0 0
+
+#@ XS3 — 앞차가 없으면 설정 속도(30 km/h)로 정속
+sg on
+sg set
+expect sg active
+wait 5
+expect lead off
+expect moving on
+obj add ped 30 -4.0 0       # #1 보행자: 30 m 앞, 오른쪽 4 m (경로 밖)에 나타남 (가려져 있다가 보이는 순간)
+obj 1 lane 0 2.0 at 28      # 자차가 28 m 앞까지 오면(약 0.25초 뒤) 내 차로 한가운데로 뛰어나옴
+wait 1
+
+#@ XM8·XM9·XS5 — 경로에 들어온 보행자를 선행 대상으로 잡고, 그 뒤 4.0 ± 1.0 m에 멈춰 정지 유지
+wait 7                      # 약 12.5~15초에 섬 (지도는 도로 꺾임 때문에 조금 일찍 알아채 부드럽게 감속하기도 함)
+expect lead on
+expect moving off
+expect hold on              # 정지 유지 요청 (정지 유지·재출발 대기 모두)
+expect gap 3 5
+
+#@ XS7 — 보행자가 앞에 서 있는 동안 정지 3초가 지나 재출발 대기, 차는 움직이지 않음
+wait 4
+expect sg wait
+expect moving off
+obj 1 lane curbl 1.2        # 보행자가 마저 건너 반대편 길가로
+wait 5
+expect lead off             # 경로를 벗어남
+expect moving off           # 재출발 대기라 스스로 출발하지 않음
+sg res                      # 운전자가 RES로 재출발
+wait 1
+expect sg active
+expect moving on
+wait 6
+expect sgalert none
