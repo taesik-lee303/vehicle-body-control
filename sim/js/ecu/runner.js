@@ -26,7 +26,8 @@ export class TcRunner {
     this.carry = 0;
   }
 
-  start(consoleName, text) {
+  // label: 로그에 보일 파일 이름 (기본은 그 콘솔의 TC 파일)
+  start(consoleName, text, label = `${consoleName}.txt`) {
     this.engine.select(consoleName);
     this.lines = text.split('\n').map((l) => l.replace(/\r$/, ''));
     if (this.lines.length && this.lines[this.lines.length - 1] === '') this.lines.pop();
@@ -34,7 +35,7 @@ export class TcRunner {
     this.remaining = this.total = this.changes = 0;
     this.carry = 0;
     this.active = true;
-    this.log(`== 시나리오 시작: ${consoleName}.txt (초기 상태에서)`, 'info');
+    this.log(`== 시나리오 시작: ${label} (초기 상태에서)`, 'info');
   }
 
   stop() {

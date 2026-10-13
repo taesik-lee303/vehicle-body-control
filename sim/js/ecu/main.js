@@ -51,6 +51,17 @@ try {
 }
 engine.onLog((line) => log(line));
 
+// REAL SIM에서 가져온 시연 시나리오 (ECU 콘솔 전용). 목록 파일 한 줄에 파일 이름 하나 (tools/consoles/scenarios/list.txt)
+const SCENARIO_DIR = 'scenarios';
+let imported = [];
+try {
+  const res = await fetch(`../tools/consoles/${SCENARIO_DIR}/list.txt`);
+  if (!res.ok) throw new Error(String(res.status));
+  imported = (await res.text()).split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+} catch (err) {
+  log(`  ! 시나리오 목록을 읽지 못했습니다: tools/consoles/${SCENARIO_DIR}/list.txt (${err.message || err})`, 'err');
+}
+
 const runner = new TcRunner(engine, log);
 // playing: 시간이 흐르는 중. tc: TC를 불러 둔 상태 (일시정지해도 위치 유지, ■나 TC 끝에서만 해제)
 const sim = { playing: false, rate: 1, carry: 0, console: 'ecu', tc: false };
@@ -71,13 +82,16 @@ const playBtn = $('play');
 for (const [name, label] of CONSOLES) consoleSel.append(new Option(label, name));
 for (const r of RATES) rateSel.append(new Option(`${r}×`, String(r)));
 
-// 시나리오 목록: (수동) + 그 콘솔의 TC 파일. 고른 종류(수동/TC)는 콘솔을 바꿔도 유지
+// 시나리오 목록: (수동) + 그 콘솔의 TC 파일 (+ ECU면 가져온 시연 시나리오).
+// option 값 = tools/consoles/ 아래 경로. 고른 것이 새 목록에도 있으면 유지, 없으면 수동/TC 종류만 유지
 function fillScenarios() {
-  const manual = scenarioSel.value === MANUAL && scenarioSel.options.length > 0;
+  const prev = scenarioSel.options.length > 0 ? scenarioSel.value : sim.console;
   scenarioSel.textContent = '';
   scenarioSel.append(new Option('(수동)', MANUAL));
-  scenarioSel.append(new Option(`${sim.console}.txt`, sim.console));
-  scenarioSel.value = manual ? MANUAL : sim.console;
+  scenarioSel.append(new Option(`${sim.console}.txt`, `tc/${sim.console}.txt`));
+  if (sim.console === 'ecu') for (const f of imported) scenarioSel.append(new Option(f, `${SCENARIO_DIR}/${f}`));
+  const values = [...scenarioSel.options].map((o) => o.value);
+  scenarioSel.value = values.includes(prev) ? prev : prev === MANUAL ? MANUAL : `tc/${sim.console}.txt`;
 }
 
 // ▶/∥ 한 버튼: 흐르는 중이면 ∥(일시정지), 멈춰 있으면 ▶(재생·재개)
@@ -131,14 +145,15 @@ async function play() {
     return;
   }
   const name = sim.console;
-  const res = await fetch(`../tools/consoles/tc/${encodeURIComponent(name)}.txt`);
+  const path = scenarioSel.value; // tc/<콘솔>.txt 또는 scenarios/<파일>
+  const res = await fetch(`../tools/consoles/${path.split('/').map(encodeURIComponent).join('/')}`);
   if (!res.ok) {
-    log(`  ! TC 파일을 읽지 못했습니다: tools/consoles/tc/${name}.txt (${res.status})`, 'err');
+    log(`  ! 시나리오 파일을 읽지 못했습니다: tools/consoles/${path} (${res.status})`, 'err');
     return;
   }
   const text = await res.text();
-  if (name !== sim.console) return; // 읽는 사이 콘솔이 바뀜
-  runner.start(name, text);
+  if (name !== sim.console || path !== scenarioSel.value) return; // 읽는 사이 콘솔·시나리오가 바뀜
+  runner.start(name, text, path.split('/').pop());
   sim.tc = true;
   setPlaying(true);
 }
@@ -199,7 +214,7 @@ function renderBar(st) {
   scoreEl.title = `확인 ${tc.checks}건 기준. TC ${tc.count}개 (FAIL 있는 TC ${tc.failed}개, 끝난 TC 기준), 관찰 ${tc.observations}건`;
 }
 
-// ---- 시작: URL ?console=ecu&tc=1&speed=10 (발표용·확인용) ----
+// ---- 시작: URL ?console=ecu&tc=1&speed=10 (발표용·확인용). tc=<파일 이름>이면 그 시나리오 (예: tc=Z01_L_lighting.txt) ----
 const params = new URLSearchParams(location.search);
 const want = params.get('console');
 fillScenarios();
@@ -210,7 +225,10 @@ loading.remove();
 log('준비됨. 콘솔과 시나리오를 고르고 ▶ (수동이면 시간만 흐름). ∥ 일시정지 중 ⏭는 한 줄씩. 입력 패널 조작은 콘솔 명령으로 실행됩니다', 'info');
 const tcParam = params.get('tc');
 if (tcParam && tcParam !== '0') {
-  scenarioSel.value = sim.console;
+  // 목록에 있는 파일 이름이면 그것, 아니면(tc=1 등) 그 콘솔의 TC 파일
+  const opt = [...scenarioSel.options].find((o) => o.value !== MANUAL && o.textContent === tcParam);
+  if (!opt && tcParam !== '1') log(`  ! 이 콘솔의 시나리오 목록에 없습니다: ${tcParam} (${sim.console}.txt 재생)`, 'err');
+  scenarioSel.value = opt ? opt.value : `tc/${sim.console}.txt`;
   play();
 }
 

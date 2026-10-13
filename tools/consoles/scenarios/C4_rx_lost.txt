@@ -1,0 +1,22 @@
+# REAL SIM 형식에서 변환: feature/sim-realism:scenarios/C4_rx_lost.txt (브랜치 7c3fd6e, 파일 마지막 변경 8f99422)
+# 변환: wait → t, expect → e, door fl open → fl open, 줄 끝 '# 설명' → 바로 위 설명 줄. 기대값은 바꾸지 않음
+#       '#@' 줄이 없어 머리 설명의 '기대:'를 tc 줄 하나로 붙임 (화면의 진행 중 TC·터미널 판정 줄에 보임)
+# 실행: ./build/con_ecu < tools/consoles/scenarios/C4_rx_lost.txt  (ECU 콘솔 전용)
+
+# C4 차량 상태 수신 중단 → 조명·와이퍼는 시동이 꺼진 것으로 봄
+# 기대: 기어 송신을 1.0초에 끊으면 1.45초 정상, 1.5초 수신 중단, 재개하면 즉시 복귀
+tc C4_rx_lost | C4 | 시연 시나리오 | REAL SIM C4_rx_lost | 기어 송신을 1.0초에 끊으면 1.45초 정상, 1.5초 수신 중단, 재개하면 즉시 복귀
+ign on
+gear d
+t 1
+# 마지막 기어 수신 1.000초
+cut gear
+t 0.45
+# 1.450초: 0.45초 경과
+e rxlost no
+t 0.05
+# 1.500초: 0.5초 경과 → 수신 중단
+e rxlost yes
+resume gear
+# 다시 들어오면 바로 복귀
+e rxlost no

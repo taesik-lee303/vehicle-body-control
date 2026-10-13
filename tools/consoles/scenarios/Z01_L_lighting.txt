@@ -1,0 +1,109 @@
+# REAL SIM 형식에서 변환: exp/sim-realism:scenarios/Z01_L_lighting.txt (브랜치 b3673b9, 파일 마지막 변경 b3673b9)
+# 변환: wait → t, expect → e, door fl open → fl open, 줄 끝 '# 설명' → 바로 위 설명 줄. 기대값은 바꾸지 않음
+#       '#@ 요구사항' 줄은 그대로 두고 아래에 tc 줄을 붙임 (화면의 진행 중 TC·터미널 판정 줄에 보임)
+# 실행: ./build/con_ecu < tools/consoles/scenarios/Z01_L_lighting.txt  (ECU 콘솔 전용)
+# 원본 설명의 '빨간색 표시'·'주행 모델'은 REAL SIM 화면 이야기다 (이 화면에서는 '#@' 줄이 설명 줄로 보임)
+
+# Z01 조명(L) 시연: L5 → L2 → L3
+# '#@' 줄은 지금 검증하는 요구사항이다. 시뮬레이터 이벤트 로그에 빨간색으로 표시된다.
+# 시작 상태: 시동 OFF, 기어 P, 속도 0, 조도 30000, 강우 0%, 스위치 OFF, 주행 모델 OFF(속도 직접 입력)
+# 시연 문서에 시간이 정해진 구간은 그대로 두고, 시간이 없는 구간은 단계 사이에 1~2초 대기를 넣었다.
+
+# ===== L 조명 =====
+# 이 시점에서 시동 ON
+ign on
+t 2
+
+#@ L5 — 센서 고장이면 조명을 켜고 표시
+tc Z01-L5 | L5 | 시연 시나리오 | REAL SIM Z01_L_lighting L5 구간 | 센서 고장이면 조명을 켜고 표시
+light off
+# 스위치 OFF, 전조등 꺼짐
+e headlight off
+t 2
+# 조도 송신을 끊음
+cut lux
+t 0.45
+# 0.45초: 아직 고장 아님
+e luxlamp off
+t 0.05
+# 0.5초: 고장 표시 켜짐
+e luxlamp on
+# 스위치가 OFF여도 전조등 켜짐
+e headlight on
+t 2
+# 시동 OFF
+ign off
+# 전조등은 꺼짐 (L1 > L5)
+e headlight off
+# 고장 표시는 유지
+e luxlamp on
+t 2
+
+#@ L2 — 1000 lux 미만 1초 연속이면 켬
+tc Z01-L2 | L2 | 시연 시나리오 | REAL SIM Z01_L_lighting L2 구간 | 1000 lux 미만 1초 연속이면 켬
+lux 1200
+# 조도 송신 재개 (정상 값)
+resume lux
+t 1
+light auto
+t 1
+ign on
+t 0.05
+e luxlamp off
+# 스위치 AUTO, 전조등 꺼짐
+e headlight off
+t 2
+# 2초 동안 서서히 낮춤
+lux 1150
+t 0.4
+lux 1100
+t 0.4
+lux 1050
+t 0.4
+# 1000은 "미만"이 아님
+lux 1000
+t 0.4
+# 1200 ~ 1000 lux: 꺼진 상태 유지
+e headlight off
+# 800 lux 도달
+lux 800
+t 0.95
+# 0.95초: 아직
+e headlight off
+t 0.05
+# 1초 연속 → 켜짐
+e headlight on
+t 2
+
+#@ L3 — 1500 lux 초과 3초 연속이면 끔
+tc Z01-L3 | L3 | 시연 시나리오 | REAL SIM Z01_L_lighting L3 구간 | 1500 lux 초과 3초 연속이면 끔
+# 스위치 AUTO, 전조등 켜짐, 800 lux
+e headlight on
+# 2초 동안 서서히 올림
+lux 1000
+t 0.4
+lux 1200
+t 0.4
+lux 1400
+t 0.4
+# 1500은 "초과"가 아님
+lux 1500
+t 0.4
+# 800 ~ 1500 lux: 켜진 상태 유지
+e headlight on
+t 0.4
+# 1600 lux 도달
+lux 1600
+t 2.95
+# 2.95초: 아직
+e headlight on
+t 0.05
+# 3초 연속 → 꺼짐
+e headlight off
+t 2
+
+# 시동 OFF로 마무리
+ign off
+t 1
+light off
+t 2
