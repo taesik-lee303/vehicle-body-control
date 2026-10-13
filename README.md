@@ -183,7 +183,7 @@ make run         # 터미널에서 명령으로 조작 (help 로 명령 목록)
 - 화면 코드(`sim/js`)에는 요구사항 판단(1000 lux, 15 km/h 등)이 없습니다.
 - 같은 C 코드를 `make test`·`make run`(gcc)과 브라우저(emcc)가 함께 씁니다.
 - 주행 모델 `drive.c`(R1~R5)가 만든 속도·기어·시동은 `console.c`를 거쳐 다른 입력과 똑같이 `vbc_rx_*()`로 들어갑니다 (사양서 6.1).
-- 추가 소스(시스템 플로우 아키텍쳐) 'docs/VBC 레이더 흐름도.html' , 'docs/VBC 전체 흐름도.html'
+- 추가 소스(시스템 플로우 아키텍쳐) [docs/VBC 레이더 흐름도.html](docs/VBC 레이더 흐름도.html), [docs/VBC 전체 흐름도.html](docs/VBC 전체 흐름도.html)
 
 ## 문서
 | 문서 | 내용 |
