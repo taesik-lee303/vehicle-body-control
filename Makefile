@@ -3,6 +3,8 @@
 # make scenarios → scenarios/*.txt 를 차례로 실행 (expect 확인)
 # make wasm      → sim/build/vbc.js (emcc 필요: source ~/emsdk/emsdk_env.sh)
 # make sim       → wasm 빌드 후 http://localhost:8080/sim/ (저장소 루트 서빙, SIM_PORT로 변경)
+# make wasm-ecu  → sim/build/ecu.js (ECU 시뮬레이터 엔진, emcc 필요)
+# make wasm-check → 터미널 콘솔 = WASM 엔진 출력 동일성 확인 (node 필요)
 # make consoles  → 모듈별 대화형 테스트 콘솔 4개 빌드 (build/con_doors 등)
 # make con-doors / con-dashboard / con-lighting / con-wipers → 해당 콘솔 실행
 # make tc        → 모듈별 TC 전체 실행, 결과 문서 docs/test/tc-results.md 생성
@@ -19,7 +21,7 @@ HEADERS := $(wildcard src/*.h)
 TEST_SRCS := $(wildcard tests/test_*.c)
 TEST_BINS := $(TEST_SRCS:tests/%.c=$(BUILD)/%)
 
-.PHONY: all test run scenarios wasm sim consoles tc clean
+.PHONY: all test run scenarios wasm sim consoles tc clean wasm-ecu wasm-check
 
 all: $(BUILD)/vbc
 
@@ -79,6 +81,25 @@ $(BUILD)/con_%: tools/consoles/con_%.c $(BUILD)/modcon.o $(LIB_OBJS) tools/conso
 
 con-%: $(BUILD)/con_%
 	./$<
+
+# ---- ECU 시뮬레이터 엔진 (modcon을 WASM으로) ----
+ECU_OUT := sim/build/ecu.js
+ECU_SRCS := src/common.c src/wipers.c src/lighting.c src/doors.c src/dashboard.c \
+	tools/consoles/modcon.c $(wildcard tools/consoles/con_*.c) tools/consoles/ecu_wasm.c
+ECU_EMFLAGS := -O2 -sMODULARIZE -sEXPORT_ES6 -sSINGLE_FILE -sENVIRONMENT=web,node \
+	-sEXPORTED_FUNCTIONS=_ecu_select,_ecu_exec,_ecu_advance,_ecu_state,_ecu_finish \
+	-sEXPORTED_RUNTIME_METHODS=cwrap,UTF8ToString
+
+wasm-ecu: $(ECU_OUT)
+
+$(ECU_OUT): $(ECU_SRCS) $(HEADERS) tools/consoles/modcon.h tools/consoles/consoles.h
+	@command -v $(EMCC) >/dev/null || { echo "emcc가 없습니다: source ~/emsdk/emsdk_env.sh"; exit 1; }
+	mkdir -p sim/build
+	$(EMCC) $(CPPFLAGS) -Itools/consoles -std=c11 -DMODCON_NO_MAIN $(ECU_EMFLAGS) -o $@ $(ECU_SRCS)
+
+# 터미널 콘솔 출력과 WASM 엔진(재생기) 출력이 같은지 확인
+wasm-check: wasm-ecu consoles
+	node tools/consoles/wasm_check.mjs
 
 # 모듈별 TC 전체 실행 → docs/test/tc-results.md, docs/test/logs/*.log
 tc: consoles

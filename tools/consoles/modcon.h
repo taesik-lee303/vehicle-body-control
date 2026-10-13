@@ -98,6 +98,9 @@ int modcon_exec(ModCon *m, const char *line);
 int modcon_advance(ModCon *m, long ms);
 /* 진행 중인 TC를 닫고 요약 줄을 낸다. FAIL이 있으면 1 */
 int modcon_finish(ModCon *m);
+/* 화면용 상태를 JSON 한 줄로 만든다 (정적 버퍼 4096바이트, 다음 호출 전까지 유효).
+ * 정의 안 된 코드가 들어 있어도 올바른 JSON이고, 이름 배열 밖 enum은 "INVALID"로 낸다 */
+const char *modcon_state_json(const ModCon *m);
 /* 시작 후 터미널에서 대화형으로 돈다. expect가 하나라도 틀리면 1을 돌려준다 */
 int modcon_run(ModCon *m);
 

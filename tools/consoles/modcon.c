@@ -646,6 +646,149 @@ static bool exec_line(ModCon *m, char *line)
     return true;
 }
 
+/* ---- 화면용 상태 JSON (시뮬레이터 ecu_state) ---- */
+
+typedef struct { char *p; size_t n, len; } JBuf;
+
+static void jf(JBuf *b, const char *fmt, ...)
+{
+    va_list ap;
+    int r;
+
+    if (b->len + 1 >= b->n)
+        return;
+    va_start(ap, fmt);
+    r = vsnprintf(b->p + b->len, b->n - b->len, fmt, ap);
+    va_end(ap);
+    if (r > 0)
+        b->len = (size_t)r < b->n - b->len ? b->len + (size_t)r : b->n - 1;
+}
+
+/* 문자열 값: " 와 \ 를 이스케이프, 제어 문자는 공백으로 */
+static void jstr(JBuf *b, const char *s)
+{
+    jf(b, "\"");
+    for (; s && *s; s++) {
+        if (*s == '"' || *s == '\\')
+            jf(b, "\\%c", *s);
+        else if ((unsigned char)*s < 0x20)
+            jf(b, " ");
+        else
+            jf(b, "%c", *s);
+    }
+    jf(b, "\"");
+}
+
+static const char *jbool(bool v) { return v ? "true" : "false"; }
+
+/* 이름 배열 밖(정의 안 된 코드)이면 "INVALID" */
+static const char *name_or(const char *const *names, int n, int32_t v)
+{
+    return v >= 0 && v < n ? names[v] : "INVALID";
+}
+
+static void jsig(JBuf *b, const char *key, const Signal *s, int32_t tx, bool cut, vbc_ms_t now)
+{
+    jf(b, "\"%s\":{\"tx\":%d,\"rx\":%d,\"received\":%s,\"age_ms\":%ld,\"cut\":%s}", key, (int)tx, (int)s->value,
+       jbool(s->received), s->received ? (long)(now - s->last_rx_ms) : -1L, jbool(cut));
+}
+
+const char *modcon_state_json(const ModCon *m)
+{
+    static char buf[4096];
+    static const char *const LEVEL[] = {"stop", "int", "low", "high"};
+    static const char *const WARN[] = {"none", "door", "lux", "rain"};
+    static const struct { unsigned bit; const char *name; } SWCS[] = {
+        {SWC_WIPER, "wiper"}, {SWC_LIGHTING, "lighting"}, {SWC_DOORS, "doors"}, {SWC_DASHBOARD, "dashboard"}};
+    JBuf b = {buf, sizeof buf, 0};
+    const VbcContext *x = &m->ctx;
+    const VbcInputs *in = &m->in;
+    const char *source = "none";
+    int32_t link = 0;
+    bool first = true;
+
+    buf[0] = '\0';
+    jf(&b, "{\"console\":");
+    jstr(&b, m->name);
+    jf(&b, ",\"title\":");
+    jstr(&b, m->title);
+    jf(&b, ",\"swc\":[");
+    for (size_t i = 0; i < sizeof SWCS / sizeof SWCS[0]; i++)
+        if (m->swc & SWCS[i].bit) {
+            jf(&b, "%s\"%s\"", first ? "" : ",", SWCS[i].name);
+            first = false;
+        }
+    jf(&b, "],\"signals\":[");
+    first = true;
+    for (int k = 0; k < K_COUNT; k++)
+        if (m->show & SIGS[k].show_bit) {
+            jf(&b, "%s\"%s\"", first ? "" : ",", SIGS[k].cmd);
+            first = false;
+        }
+    jf(&b, "],\"t\":%lu,\"step_ms\":%lu,\"send_ms\":%lu,\"auto\":%s,", (unsigned long)m->now,
+       (unsigned long)m->step_period_ms, (unsigned long)m->send_period_ms, jbool(m->auto_send));
+
+    jf(&b, "\"in\":{");
+    jsig(&b, "ign", &in->ignition, m->ign, m->cut & P_IGN, m->now);
+    jf(&b, ",");
+    jsig(&b, "gear", &in->gear, m->gear, m->cut & P_GEAR, m->now);
+    jf(&b, ",");
+    jsig(&b, "speed", &in->speed, m->speed, m->cut & P_SPEED, m->now);
+    jf(&b, ",");
+    jsig(&b, "lux", &in->lux, m->lux, m->cut & P_LUX, m->now);
+    jf(&b, ",");
+    jsig(&b, "rain", &in->rain, m->rain, m->cut & P_RAIN, m->now);
+    jf(&b, ",\"doors\":[%d,%d,%d,%d],\"light_sw\":%d,\"wiper_sw\":%d,\"level\":%d},", (int)in->door_open[0],
+       (int)in->door_open[1], (int)in->door_open[2], (int)in->door_open[3], (int)in->light_sw, (int)in->wiper_sw,
+       (int)m->wiper_level);
+
+    jf(&b, "\"ctx\":{\"rx_lost\":%s,\"ignition_on\":%s,\"gear\":%d,\"speed_valid\":%s,\"speed_kmh\":%d,"
+           "\"lux_fault\":%s,\"lux_valid\":%s,\"lux\":%d,\"rain_fault\":%s,\"rain_valid\":%s,\"rain\":%d,",
+       jbool(x->rx_lost), jbool(x->ignition_on), (int)x->gear, jbool(x->speed_valid), (int)x->speed_kmh,
+       jbool(x->lux_fault), jbool(x->lux_valid), (int)x->lux, jbool(x->rain_fault), jbool(x->rain_valid), (int)x->rain);
+    jf(&b, "\"door_open\":[%s,%s,%s,%s],\"any_door_open\":%s,\"light_sw\":%d,\"wiper_sw\":%d,"
+           "\"ignition_valid\":%s,\"gear_valid\":%s,\"door_valid\":[%s,%s,%s,%s],"
+           "\"light_sw_valid\":%s,\"wiper_sw_valid\":%s},",
+       jbool(x->door_open[0]), jbool(x->door_open[1]), jbool(x->door_open[2]), jbool(x->door_open[3]),
+       jbool(x->any_door_open), (int)x->light_sw, (int)x->wiper_sw, jbool(x->ignition_valid), jbool(x->gear_valid),
+       jbool(x->door_valid[0]), jbool(x->door_valid[1]), jbool(x->door_valid[2]), jbool(x->door_valid[3]),
+       jbool(x->light_sw_valid), jbool(x->wiper_sw_valid));
+
+    if (m->swc & SWC_WIPER) {
+        source = "swc";
+        link = (int32_t)m->out.wiper;
+    } else if (m->swc & SWC_LIGHTING) {
+        source = "inject";
+        link = m->wiper_level;
+    }
+    jf(&b, "\"link\":{\"wiper_level\":\"%s\",\"source\":\"%s\"},", name_or(LEVEL, 4, link), source);
+
+    jf(&b, "\"out\":{\"headlight\":%s,\"lux_lamp\":%s,\"wiper\":\"%s\",\"rain_lamp\":%s,\"locked\":%s,"
+           "\"warning\":\"%s\"},",
+       jbool(m->out.headlight_on), jbool(m->out.lux_fault_lamp), name_or(LEVEL, 4, (int32_t)m->out.wiper),
+       jbool(m->out.rain_fault_lamp), jbool(m->out.door_locked), name_or(WARN, 4, (int32_t)m->out.warning));
+
+    if (m->state_cmd) {
+        jf(&b, "\"state\":{\"cmd\":");
+        jstr(&b, m->state_cmd);
+        jf(&b, ",\"label\":");
+        jstr(&b, m->state_label);
+        jf(&b, ",\"value\":%d,\"words\":[", m->mod_get_state && m->mod_get_state((ModCon *)m) ? 1 : 0);
+        jstr(&b, m->state_words[0]);
+        jf(&b, ",");
+        jstr(&b, m->state_words[1]);
+        jf(&b, "]},");
+    } else {
+        jf(&b, "\"state\":null,");
+    }
+
+    jf(&b, "\"tc\":{\"id\":");
+    jstr(&b, m->tc);
+    jf(&b, ",\"count\":%d,\"failed\":%d,\"checks\":%d,\"failures\":%d,\"observations\":%d}}", m->tc_count,
+       m->tc_failed, m->checks, m->failures, m->observations);
+    return buf;
+}
+
 void modcon_start(ModCon *m)
 {
     m->tc[0] = '\0';
